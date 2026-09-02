@@ -179,6 +179,7 @@ function headerHtml() {
         <button id="mode-teacher" class="${m === "teacher" ? "active" : ""}">🍎 Teacher</button>
         <button id="mode-student" class="${m === "student" ? "active" : ""}">🎒 Student</button>
       </div>
+      <a class="linkish" href="tracker.html" style="text-decoration:none;" title="Weekly XP from real Duolingo accounts">📈 XP tracker</a>
       <button class="linkish" id="reset-btn" title="Reset all demo data">Reset demo</button>
     </header>`;
 }

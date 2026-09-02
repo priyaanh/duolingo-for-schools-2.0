@@ -35,6 +35,32 @@ Everything persists in `localStorage`, and the app ships with a seeded demo clas
 (*Spanish 1 — Period 3*) so both dashboards are interesting from the first load.
 Use **Reset demo** in the header to start fresh.
 
+## 📈 Real XP tracker (track actual Duolingo accounts)
+
+Since Duolingo for Schools is shutting down, this repo also includes a **real XP tracker** so a
+teacher can keep seeing how much XP each student earns per week on the *real* Duolingo app:
+
+- A GitHub Action ([.github/workflows/track-xp.yml](.github/workflows/track-xp.yml)) runs daily
+  at 06:00 UTC, reads each student's **public** Duolingo profile (total XP and streak only),
+  and commits a snapshot to [data/xp-history.json](data/xp-history.json).
+- [tracker.html](tracker.html) turns those snapshots into a weekly leaderboard: XP this week,
+  XP last week, weekly history per student, class totals, and streaks. Weeks start Monday (UTC).
+
+### Setup (one time)
+
+1. Put everyone's real Duolingo usernames in [data/usernames.json](data/usernames.json)
+   (profiles must **not** be set to private in Duolingo → Settings → Privacy).
+2. On GitHub, open the **Actions** tab and enable workflows if prompted.
+3. Run **Track Duolingo XP** once manually (Actions → Track Duolingo XP → Run workflow) to record
+   the first snapshot. After that it runs automatically every day.
+4. The teacher bookmarks the tracker page — with GitHub Pages enabled it's at
+   `https://<user>.github.io/duolingo-for-schools-2.0/tracker.html`.
+
+> Notes: this uses Duolingo's public, unofficial profile endpoint, so it only reads data anyone
+> can already see on a profile page — but the endpoint isn't officially supported and could
+> change or be rate-limited. XP "this week" is computed from snapshot differences, so the first
+> week only counts XP earned after tracking started.
+
 ## 🚀 Running it
 
 No install needed — it's a static site.

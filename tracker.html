@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Class XP Tracker — Duolingo for Schools 2.0</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    .best { background: #fff8dc; }
+    .muted { color: var(--ink-soft); font-weight: 700; }
+    .setup ol { margin: 12px 0 0 22px; font-weight: 700; line-height: 1.9; }
+    .setup code { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html" style="text-decoration:none;">
+      <span class="mascot">🦜</span>
+      <span>Duolingo for Schools 2.0</span>
+      <span class="tag">unofficial remake</span>
+    </a>
+    <div class="spacer"></div>
+    <span style="font-weight:900;color:var(--ink-soft);">📈 Real Duolingo XP Tracker</span>
+  </header>
+
+  <main class="page" id="tracker-root">
+    <div class="empty">Loading tracker data…</div>
+  </main>
+
+  <footer class="site">
+    Reads only public Duolingo profile data (total XP and streak) via a daily snapshot.
+    Unofficial project — not affiliated with or endorsed by Duolingo, Inc.
+  </footer>
+
+  <script src="js/tracker.js"></script>
+</body>
+</html>
