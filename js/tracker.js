@@ -17,6 +17,10 @@ const USERNAME_RE = /^[A-Za-z0-9._-]{2,30}$/;
 const escT = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// Link a display name to the person's real Duolingo profile page.
+const profileLink = (username, inner) =>
+  `<a class="profile-link" href="https://www.duolingo.com/profile/${encodeURIComponent(username)}" target="_blank" rel="noopener" title="Open @${escT(username)}'s real Duolingo profile">${inner}</a>`;
+
 const fmt = (n) => n.toLocaleString("en-US");
 
 // Weeks run Monday 00:00 through Sunday 23:59 in this timezone; snapshot dates
@@ -168,7 +172,7 @@ function bindJoinBox(trackedLower) {
       const already = trackedLower.has(name.toLowerCase());
       setJoinResult(`
         <div style="border:2px solid var(--green);background:var(--green-pale);border-radius:12px;padding:14px;font-weight:800;">
-          🎉 <strong>${escT(info.name || name)}</strong> <span style="color:var(--ink-soft)">@${escT(name)}</span>
+          🎉 <strong>${profileLink(name, escT(info.name || name))}</strong> <span style="color:var(--ink-soft)">@${escT(name)}</span>
           — ⚡ ${fmt(info.totalXp ?? 0)} total XP · 🔥 ${fmt(info.streak ?? 0)} day streak
           ${already
             ? `<div style="margin-top:6px;">✅ Already on the class tracker below.</div>`
@@ -249,7 +253,7 @@ function addLiveRow(info, trackedLower) {
   if (document.querySelector(`[data-live-user="${name.toLowerCase()}"]`)) return;
   body.insertAdjacentHTML("beforeend", `
     <tr data-live-user="${escT(name.toLowerCase())}">
-      <td>📡 <strong>${escT(info.name || name)}</strong> <span class="muted">@${escT(name)}</span>
+      <td>📡 <strong>${profileLink(name, escT(info.name || name))}</strong> <span class="muted">@${escT(name)}</span>
         <span class="chip pending">live · not enrolled yet</span></td>
       <td class="cell-warn">—</td>
       <td>—</td>
@@ -291,9 +295,10 @@ function render(cfg, history) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .filter((s) => s.users && Object.keys(s.users).length);
 
-  const head = `<div class="page-head"><h1>📈 Class XP Tracker</h1>` +
+  const head = `<div class="page-head"><h1>📈 Class XP Tracker</h1>
+    <span class="chip done" title="Every name links to the real profile; data is fetched nightly from duolingo.com">🟢 Connected to real Duolingo</span>` +
     (snaps.length
-      ? `<span class="sub">Real Duolingo XP, snapshotted nightly · latest full day: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks run Monday–Sunday, Pacific time</span>`
+      ? `<span class="sub">Live public profile data from duolingo.com, snapshotted nightly · latest full day: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks run Monday–Sunday, Pacific time · tap a name to open the real profile</span>`
       : "") +
     `</div>`;
 
@@ -393,7 +398,7 @@ function render(cfg, history) {
           r
             ? `<div class="slot ${cls[i]}">
                  <div class="avatar-circle">${escT((r.name || "?").trim().charAt(0).toUpperCase() || "?")}</div>
-                 <div class="who">${isMine(r.username) ? "⭐ " : ""}${escT(r.name)}</div>
+                 <div class="who">${isMine(r.username) ? "⭐ " : ""}${profileLink(r.username, escT(r.name))}</div>
                  <div class="score">${lbValue(r, mode)}</div>
                  <div class="stand">${standNum[i]}</div>
                </div>`
@@ -407,7 +412,7 @@ function render(cfg, history) {
         (r, i) => `
         <div class="lb-row">
           <span class="rank">${i + 4}</span>
-          <span class="nm">${isMine(r.username) ? "⭐ " : ""}${escT(r.name)} <span class="muted">@${escT(r.username)}</span></span>
+          <span class="nm">${isMine(r.username) ? "⭐ " : ""}${profileLink(r.username, escT(r.name))} <span class="muted">@${escT(r.username)}</span></span>
           <span class="val">${lbValue(r, mode)}</span>
         </div>`
       )
@@ -439,7 +444,7 @@ function render(cfg, history) {
       const mine = isMine(r.username) ? "⭐ " : "";
       return `
         <tr class="${r.thisWeek === bestThisWeek && bestThisWeek > 0 ? "best" : ""}">
-          <td>${medal} ${mine}<strong>${escT(r.name)}</strong> <span class="muted">@${escT(r.username)}</span></td>
+          <td>${medal} ${mine}<strong>${profileLink(r.username, escT(r.name))}</strong> <span class="muted">@${escT(r.username)}</span></td>
           <td class="${(r.thisWeek || 0) > 0 ? "cell-good" : "cell-warn"}">${r.thisWeek === null ? "—" : "⚡ " + fmt(r.thisWeek)}</td>
           <td>${r.lastWeek === null ? "—" : "⚡ " + fmt(r.lastWeek)}</td>
           <td>${fmt(r.totalXp)}</td>
@@ -459,7 +464,7 @@ function render(cfg, history) {
           return `<td class="${g ? "cell-good" : "cell-warn"}">${g === null ? "—" : fmt(g)}</td>`;
         })
         .join("");
-      return `<tr><td><strong>${escT(info ? info.name : u)}</strong></td>${cells}</tr>`;
+      return `<tr><td><strong>${profileLink(u, escT(info ? info.name : u))}</strong></td>${cells}</tr>`;
     })
     .join("");
   const historyTotals = historyWeeks
