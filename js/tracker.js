@@ -109,11 +109,13 @@ const issueUrl = (u) =>
   `https://github.com/${REPO}/issues/new?title=${encodeURIComponent(`join: ${u}`)}` +
   `&body=${encodeURIComponent("Please add me to the class XP tracker. (This is automated — just press Submit new issue.)")}`;
 
-function joinBoxHtml() {
+function joinBoxHtml(forceOpen = false) {
+  let watchPending = false;
+  try { watchPending = !!localStorage.getItem(WATCH_KEY); } catch { /* fine */ }
   return `
-    <div class="card" style="margin-bottom:20px;">
-      <h2 style="font-weight:900;margin-bottom:4px;">➕ Add yourself to the tracker</h2>
-      <p class="muted" style="font-weight:700;color:var(--ink-soft);font-size:14px;">
+    <details class="card collapser" id="join-details" style="margin-bottom:20px;" ${forceOpen || watchPending ? "open" : ""}>
+      <summary>➕ Add yourself to the tracker</summary>
+      <p class="muted" style="font-weight:700;color:var(--ink-soft);font-size:14px;margin-top:10px;">
         Type your real Duolingo username. Profiles must not be set to private
         (Duolingo → Settings → Privacy).
       </p>
@@ -129,12 +131,14 @@ function joinBoxHtml() {
         a minute. Already have a GitHub account? <strong>Join the class tracker</strong> files the
         request for you automatically instead.
       </p>
-    </div>`;
+    </details>`;
 }
 
 function setJoinResult(html) {
   const el = document.getElementById("join-result");
   if (el) el.innerHTML = html;
+  const box = document.getElementById("join-details");
+  if (box) box.open = true;
 }
 
 function bindJoinBox(trackedLower) {
@@ -297,7 +301,7 @@ function render(cfg, history) {
     const reason = usernames.length
       ? `${usernames.length} username${usernames.length === 1 ? " is" : "s are"} configured, but no snapshots have been recorded yet.`
       : "No Duolingo usernames are configured yet, so there is nothing to track.";
-    root.innerHTML = head + joinBoxHtml() + setupHelp(reason);
+    root.innerHTML = head + joinBoxHtml(true) + setupHelp(reason);
     const emptySet = new Set(usernames.map((u) => u.toLowerCase()));
     bindJoinBox(emptySet);
     resumeWatchIfPending(emptySet);
@@ -464,8 +468,6 @@ function render(cfg, history) {
 
   root.innerHTML = `
     ${head}
-    ${joinBoxHtml()}
-
     <div class="stat-row">
       <div class="stat"><div class="num">⚡ ${fmt(classThisWeek)}</div><div class="lbl">Class XP this week</div></div>
       <div class="stat"><div class="num">${rows.filter((r) => r.tracked).length}/${allUsers.length}</div><div class="lbl">Profiles tracked</div></div>
@@ -476,20 +478,25 @@ function render(cfg, history) {
     <h2 class="section-title">🏆 Leaderboard</h2>
     <div id="lb-section"></div>
 
-    <h2 class="section-title">📋 Weekly details</h2>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th></tr></thead>
-      <tbody id="leaderboard-body">${leaderboard}</tbody>
-    </table></div>
+    ${joinBoxHtml()}
 
-    <h2 class="section-title">🗓 Weekly history (XP gained)</h2>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Student</th>${historyHead}</tr></thead>
-      <tbody>
-        ${historyRows}
-        <tr><td><strong>Class total</strong></td>${historyTotals}</tr>
-      </tbody>
-    </table></div>`;
+    <details class="card collapser" style="margin-top:4px;">
+      <summary>📋 Full stats & weekly history</summary>
+      <h2 class="section-title">📋 Weekly details</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th></tr></thead>
+        <tbody id="leaderboard-body">${leaderboard}</tbody>
+      </table></div>
+
+      <h2 class="section-title">🗓 Weekly history (XP gained)</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Student</th>${historyHead}</tr></thead>
+        <tbody>
+          ${historyRows}
+          <tr><td><strong>Class total</strong></td>${historyTotals}</tr>
+        </tbody>
+      </table></div>
+    </details>`;
 
   mountLeaderboard("week");
   bindJoinBox(trackedLower);

@@ -525,10 +525,26 @@ function renderClassroom() {
 }
 
 function overviewTab(c, students) {
+  const gettingStarted =
+    !students.length || !c.assignments.length
+      ? `
+    <div class="card" style="margin-bottom:16px;background:var(--blue-pale);border-color:var(--blue);">
+      <h3 style="font-weight:900;margin-bottom:8px;">🚀 Getting started</h3>
+      <p style="font-weight:700;font-size:14px;margin:5px 0;">✅ Classroom created</p>
+      <p style="font-weight:700;font-size:14px;margin:5px 0;">
+        ${students.length ? "✅ Students joined" : `2️⃣ Tell students to open this site, tap <strong>I'm a student</strong>, and enter code <strong>${esc(c.code)}</strong>`}
+        ${students.length ? "" : ` — or add them yourself in the <button class="linkish" data-tab="students">Students tab</button>`}
+      </p>
+      <p style="font-weight:700;font-size:14px;margin:5px 0;">
+        ${c.assignments.length ? "✅ First assignment created" : `3️⃣ Give homework in the <button class="linkish" data-tab="assignments">Assignments tab</button>`}
+      </p>
+    </div>`
+      : "";
   const totalXp = students.reduce((a, s) => a + s.xp, 0);
   const avgCrowns = students.length ? (students.reduce((a, s) => a + crownsOf(s), 0) / students.length).toFixed(1) : "0";
   const activeToday = students.filter((s) => s.lastActive === todayStr()).length;
   return `
+    ${gettingStarted}
     <div class="stat-row">
       <div class="stat"><div class="num">${students.length}</div><div class="lbl">Students</div></div>
       <div class="stat"><div class="num">${totalXp}</div><div class="lbl">Total XP</div></div>

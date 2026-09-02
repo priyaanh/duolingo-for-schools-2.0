@@ -560,6 +560,19 @@ tr + tr td { border-top: 1px solid var(--line); }
   font-weight: 700;
 }
 
+/* ---------- Collapsible sections ---------- */
+
+details.collapser > summary {
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 16px;
+  list-style: none;
+  user-select: none;
+}
+details.collapser > summary::-webkit-details-marker { display: none; }
+details.collapser > summary::after { content: "▾"; float: right; color: var(--ink-soft); }
+details.collapser[open] > summary::after { content: "▴"; }
+
 /* ---------- Podium leaderboard ---------- */
 
 .lb-toggle { margin-bottom: 18px; display: inline-flex; }
