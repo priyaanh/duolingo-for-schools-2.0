@@ -1,3 +1,14 @@
 {
-  "snapshots": []
+  "snapshots": [
+    {
+      "date": "2026-09-02",
+      "users": {
+        "Duolingo": {
+          "name": "Duolingo",
+          "totalXp": 1370,
+          "streak": 0
+        }
+      }
+    }
+  ]
 }
