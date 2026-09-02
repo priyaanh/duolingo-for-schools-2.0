@@ -420,6 +420,7 @@ tr + tr td { border-top: 1px solid var(--line); }
   vertical-align: middle;
 }
 .speak-btn:hover { filter: brightness(0.95); }
+.speak-btn.big { font-size: 34px; padding: 8px 20px; margin-right: 12px; }
 
 .confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
 .confetti span { position: absolute; top: -40px; animation: confetti-fall 2.8s ease-in forwards; }

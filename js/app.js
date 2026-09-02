@@ -54,11 +54,20 @@ const normalize = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const skillById = (id) => COURSE.skills.find((s) => s.id === id);
+const skillById = (id) => {
+  for (const cr of COURSES) {
+    const s = cr.skills.find((sk) => sk.id === id);
+    if (s) return s;
+  }
+};
+const courseById = (id) => COURSES.find((cr) => cr.id === id) || COURSES[0];
+const courseOfClassroom = (c) => courseById(c && c.courseId);
+const courseOfSkill = (skillId) => COURSES.find((cr) => cr.skills.some((sk) => sk.id === skillId)) || COURSES[0];
 
 /* ---------- sound & speech (all best-effort; muted flag persists) ---------- */
 
 const MUTE_KEY = "dfs2-muted";
+const TTS_OK = (() => { try { return "speechSynthesis" in window; } catch (e) { return false; } })();
 let muted = false;
 try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch (e) { /* fine */ }
 let audioCtx = null;
@@ -375,6 +384,7 @@ function renderOnboarding() {
         </p>
         <div class="form-row">
           <input id="ob-class-name" placeholder="Classroom name (e.g. Spanish 1 — Period 3)" maxlength="40" style="flex:1;min-width:220px;" />
+          <select id="ob-course">${COURSES.map((cr) => `<option value="${cr.id}">${cr.flag} ${esc(cr.title)}</option>`).join("")}</select>
         </div>
         <div class="form-row">
           <input id="ob-pin" placeholder="Teacher PIN (optional, 4+ digits)" maxlength="12" inputmode="numeric" />
@@ -461,7 +471,9 @@ function renderOnboarding() {
     const err = $("#ob-teacher-error");
     if (!name) { err.textContent = "Please give your classroom a name."; return; }
     if (pin && pin.length < 4) { err.textContent = "The PIN needs at least 4 characters (or leave it empty)."; return; }
-    state.classrooms.push({ id: uid(), name, code: classCode(), courseId: COURSE.id, studentIds: [], assignments: [] });
+    const courseSel = $("#ob-course");
+    const courseId = courseSel && courseSel.value ? courseSel.value : COURSES[0].id;
+    state.classrooms.push({ id: uid(), name, code: classCode(), courseId, studentIds: [], assignments: [] });
     state.teacherPinHash = pin ? pinHash(pin) : null;
     state.role = "teacher";
     state.mode = "teacher";
@@ -538,11 +550,12 @@ function renderTeacherHome() {
         ? c.assignments.reduce((acc, a) => acc + c.studentIds.filter((sid) => getStudent(sid)?.completedAssignments.includes(a.id)).length, 0)
         : 0;
       const totalSlots = c.assignments.length * c.studentIds.length;
+      const crs = courseOfClassroom(c);
       return `
         <button class="card clickable" data-classroom="${c.id}">
           <h2 style="font-size:19px;font-weight:900;margin-bottom:6px;">🏫 ${esc(c.name)}</h2>
           <p style="color:var(--ink-soft);font-weight:700;font-size:14px;">
-            ${COURSE.flag} ${COURSE.title} · ${c.studentIds.length} student${c.studentIds.length === 1 ? "" : "s"}<br/>
+            ${crs.flag} ${crs.title} · ${c.studentIds.length} student${c.studentIds.length === 1 ? "" : "s"}<br/>
             ${c.assignments.length} assignment${c.assignments.length === 1 ? "" : "s"}${totalSlots ? ` · ${done}/${totalSlots} turned in` : ""}
           </p>
           <p style="margin-top:10px;font-weight:800;font-size:13px;color:var(--blue);">Class code: ${esc(c.code)}</p>
@@ -581,7 +594,7 @@ function renderTeacherHome() {
   $("#new-class-btn").addEventListener("click", () => {
     const name = prompt("Classroom name (e.g. Spanish 2 — Period 5):");
     if (!name || !name.trim()) return;
-    const c = { id: uid(), name: name.trim(), code: classCode(), courseId: COURSE.id, studentIds: [], assignments: [] };
+    const c = { id: uid(), name: name.trim(), code: classCode(), courseId: COURSES[0].id, studentIds: [], assignments: [] };
     state.classrooms.push(c);
     save();
     go({ name: "classroom", classroomId: c.id, tab: "overview" });
@@ -614,7 +627,7 @@ function renderClassroom() {
       <div class="page-head">
         <button class="linkish" id="back-btn">← Classrooms</button>
         <h1>🏫 ${esc(c.name)}</h1>
-        <span class="sub">${COURSE.flag} ${COURSE.title} course · Class code <strong>${esc(c.code)}</strong></span>
+        <span class="sub">${courseOfClassroom(c).flag} ${courseOfClassroom(c).title} course · Class code <strong>${esc(c.code)}</strong></span>
       </div>
       <div class="tabs">${tabs}</div>
       ${body}
@@ -624,6 +637,14 @@ function renderClassroom() {
   $$("[data-tab]").forEach((el) =>
     el.addEventListener("click", () => go({ name: "classroom", classroomId: c.id, tab: el.dataset.tab }))
   );
+  const courseSel = $("#course-select");
+  if (courseSel && courseSel.addEventListener)
+    courseSel.addEventListener("change", () => {
+      c.courseId = courseSel.value || c.courseId;
+      save();
+      go({ name: "classroom", classroomId: c.id, tab: "overview" });
+    });
+
   const copyBtn = $("#copy-code-btn");
   if (copyBtn) {
     copyBtn.addEventListener("click", async () => {
@@ -674,6 +695,10 @@ function overviewTab(c, students) {
       </p>
       <span class="code-box">${esc(c.code)}</span>
       <button class="btn ghost small" id="copy-code-btn" style="margin-left:10px;">📋 Copy code</button>
+      <div class="form-row" style="margin-top:16px;">
+        <label for="course-select" style="font-weight:800;font-size:13px;color:var(--ink-soft);">Course:</label>
+        <select id="course-select">${COURSES.map((cr) => `<option value="${cr.id}" ${cr.id === c.courseId ? "selected" : ""}>${cr.flag} ${esc(cr.title)}</option>`).join("")}</select>
+      </div>
     </div>`;
 }
 
@@ -708,7 +733,7 @@ function studentsTab(c, students) {
 }
 
 function assignmentsTab(c, students) {
-  const skillOptions = COURSE.skills.map((s) => `<option value="${s.id}">${s.icon} ${esc(s.title)}</option>`).join("");
+  const skillOptions = courseOfClassroom(c).skills.map((s) => `<option value="${s.id}">${s.icon} ${esc(s.title)}</option>`).join("");
   const list = c.assignments
     .map((a) => {
       const skill = skillById(a.skillId);
@@ -788,10 +813,11 @@ function leaderboardTab(c, students) {
 
 function progressTab(c, students) {
   if (!students.length) return `<div class="empty">Add students to see their progress here.</div>`;
-  const head = COURSE.skills.map((s) => `<th title="${esc(s.title)}">${s.icon}<br/>${esc(s.title)}</th>`).join("");
+  const course = courseOfClassroom(c);
+  const head = course.skills.map((s) => `<th title="${esc(s.title)}">${s.icon}<br/>${esc(s.title)}</th>`).join("");
   const rows = students
     .map((s) => {
-      const cells = COURSE.skills
+      const cells = course.skills
         .map((sk) => {
           const lvl = s.skillLevels[sk.id] || 0;
           return `<td class="${lvl ? "cell-good" : "cell-warn"}">${lvl ? "👑".repeat(Math.min(lvl, 3)) : "—"}</td>`;
@@ -946,6 +972,9 @@ function renderStudentHome() {
   const s = getStudent(state.activeStudentId);
   if (!s) return go({ name: "student-pick" });
   const myClasses = classroomsOf(s.id);
+  const DAILY_GOAL = 30;
+  const todayXp = s.today && s.today.date === todayStr() ? s.today.xp : 0;
+  const goalPct = Math.min(1, todayXp / DAILY_GOAL);
 
   const pendingAssignments = myClasses.flatMap((c) =>
     c.assignments
@@ -988,7 +1017,8 @@ function renderStudentHome() {
         .join("")}</div>`
       : "";
 
-  const tree = COURSE.skills
+  const course = courseOfClassroom(myClasses[0]);
+  const tree = course.skills
     .map((sk) => {
       const lvl = s.skillLevels[sk.id] || 0;
       const cls = lvl >= 3 ? "maxed" : lvl > 0 ? "started" : "";
@@ -1010,6 +1040,15 @@ function renderStudentHome() {
           <div style="color:var(--ink-soft);font-weight:700;font-size:13px;">${myClasses.map((c) => esc(c.name)).join(" · ") || "No class yet"}</div>
         </div>
         <div class="spacer" style="flex:1"></div>
+        <span class="pill" title="Daily goal: earn ${DAILY_GOAL} XP today">
+          <svg width="44" height="44" viewBox="0 0 48 48" style="display:block;" role="img" aria-label="Daily goal: ${todayXp} of ${DAILY_GOAL} XP">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="var(--line)" stroke-width="5"/>
+            <circle cx="24" cy="24" r="20" fill="none" stroke="${goalPct >= 1 ? "var(--yellow)" : "var(--green)"}" stroke-width="5"
+              stroke-linecap="round" stroke-dasharray="${(goalPct * 125.7).toFixed(1)} 125.7" transform="rotate(-90 24 24)"/>
+            <text x="24" y="30" text-anchor="middle" font-size="15">${goalPct >= 1 ? "🎉" : "🎯"}</text>
+          </svg>
+          ${todayXp}/${DAILY_GOAL} today
+        </span>
         <span class="pill" title="Total XP">⚡ ${s.xp} XP</span>
         <span class="pill" title="Day streak">🔥 ${s.streak}</span>
         <span class="pill" title="Crowns">👑 ${crownsOf(s)}</span>
@@ -1021,7 +1060,7 @@ function renderStudentHome() {
       ${assignmentCards || `<div class="empty">🎉 Nothing due — you're all caught up!</div>`}
       ${classLeaderboard}
 
-      <h2 class="section-title">${COURSE.flag} ${COURSE.title} — Skill tree</h2>
+      <h2 class="section-title">${course.flag} ${course.title} — Skill tree</h2>
       <div class="skill-tree">${tree}</div>
     </main>`);
 
@@ -1060,58 +1099,76 @@ function renderStudentHome() {
 /* ============================== lesson engine ============================== */
 
 function generateLesson(skill, count = 8) {
+  const course = courseOfSkill(skill.id);
   const exercises = [];
   const words = shuffle(skill.words);
   const sentences = shuffle(skill.sentences);
-  const allWords = COURSE.skills.flatMap((s) => s.words);
+  const allWords = course.skills.flatMap((s) => s.words);
 
-  // 1 match + up to 2 word-bank sentences + choice/type for the rest
+  // 1 match + up to 2 word-bank sentences (+ 1 listening when the browser can
+  // speak) + choice/type for the rest
   exercises.push(makeMatch(skill));
-  sentences.slice(0, 2).forEach((sen) => exercises.push(makeBank(sen, allWords)));
+  sentences.slice(0, 2).forEach((sen) => exercises.push(makeBank(sen, allWords, course)));
+  if (TTS_OK) exercises.push(makeListen(words[0], skill, course));
 
-  let wi = 0;
+  let wi = TTS_OK ? 1 : 0;
   const kinds = ["choice", "reverse-choice", "type"];
   while (exercises.length < count) {
     const w = words[wi % words.length];
     wi++;
     const kind = kinds[exercises.length % kinds.length];
-    if (kind === "choice") exercises.push(makeChoice(w, skill, "es-en"));
-    else if (kind === "reverse-choice") exercises.push(makeChoice(w, skill, "en-es"));
-    else exercises.push(makeType(w));
+    if (kind === "choice") exercises.push(makeChoice(w, skill, "target-en", course));
+    else if (kind === "reverse-choice") exercises.push(makeChoice(w, skill, "en-target", course));
+    else exercises.push(makeType(w, course));
   }
   return shuffle(exercises);
 }
 
-function makeChoice(word, skill, dir) {
-  const isEsEn = dir === "es-en";
-  const answer = isEsEn ? word.en : word.es;
+function makeChoice(word, skill, dir, course) {
+  const toEnglish = dir === "target-en";
+  const answer = toEnglish ? word.en : word.es;
   const distractors = sample(
-    skill.words.filter((w) => w !== word).map((w) => (isEsEn ? w.en : w.es)),
+    skill.words.filter((w) => w !== word).map((w) => (toEnglish ? w.en : w.es)),
     3
   );
   return {
     kind: "choice",
-    label: isEsEn ? 'Select the meaning of the Spanish word' : "Select the Spanish translation",
-    prompt: isEsEn ? word.es : word.en,
+    label: toEnglish ? `Select the meaning of the ${course.langName} word` : `Select the ${course.langName} translation`,
+    prompt: toEnglish ? word.es : word.en,
     options: shuffle([answer, ...distractors]),
     answer,
-    speak: isEsEn ? word.es : word.en,
-    speakLang: isEsEn ? "es-ES" : "en-US"
+    speak: toEnglish ? word.es : word.en,
+    speakLang: toEnglish ? course.lang : "en-US"
   };
 }
 
-function makeType(word) {
+function makeType(word, course) {
   return {
     kind: "type",
     label: "Type the English translation",
     prompt: word.es,
     answer: word.en,
     speak: word.es,
-    speakLang: "es-ES"
+    speakLang: course.lang
   };
 }
 
-function makeBank(sentence, allWords) {
+function makeListen(word, skill, course) {
+  const distractors = sample(
+    skill.words.filter((w) => w !== word).map((w) => w.es),
+    3
+  );
+  return {
+    kind: "listen",
+    label: "Tap what you hear",
+    options: shuffle([word.es, ...distractors]),
+    answer: word.es,
+    speak: word.es,
+    speakLang: course.lang
+  };
+}
+
+function makeBank(sentence, allWords, course) {
   const tokens = sentence.en.replace(/[.,!?—]/g, "").split(/\s+/).filter(Boolean);
   const distractorPool = allWords
     .flatMap((w) => w.en.replace(/[.,!?—]/g, "").split(/\s+/))
@@ -1124,7 +1181,7 @@ function makeBank(sentence, allWords) {
     bank,
     answer: tokens.join(" "),
     speak: sentence.es,
-    speakLang: "es-ES"
+    speakLang: course.lang
   };
 }
 
@@ -1167,7 +1224,7 @@ function renderLesson() {
   const pct = Math.round((session.correct / session.total) * 100);
 
   let body = "";
-  if (ex.kind === "choice") {
+  if (ex.kind === "choice" || ex.kind === "listen") {
     body = `<div class="options">${ex.options
       .map((o, i) => `<button class="option" data-opt="${i}">${esc(o)}</button>`)
       .join("")}</div>`;
@@ -1195,7 +1252,9 @@ function renderLesson() {
     </div>
     <main class="lesson-body">
       <div class="exercise-kind">${esc(ex.label)}</div>
-      ${ex.kind !== "match" ? `<div class="prompt">${ex.speak ? `<button class="speak-btn" id="speak-btn" title="Listen">🔊</button>` : ""}${esc(ex.prompt)}</div>` : ""}
+      ${ex.kind === "match" ? "" : ex.kind === "listen"
+        ? `<div class="prompt"><button class="speak-btn big" id="speak-btn" title="Listen">🔊</button><span style="font-size:16px;color:var(--ink-soft);font-weight:700;">Tap the speaker, then choose what you heard</span></div>`
+        : `<div class="prompt">${ex.speak ? `<button class="speak-btn" id="speak-btn" title="Listen">🔊</button>` : ""}${esc(ex.prompt)}</div>`}
       ${body}
     </main>
     <div class="lesson-footer" id="lesson-footer">
@@ -1232,7 +1291,7 @@ function renderLesson() {
 function bindExercise(ex) {
   const checkBtn = $("#check-btn");
 
-  if (ex.kind === "choice") {
+  if (ex.kind === "choice" || ex.kind === "listen") {
     let selected = null;
     $$("[data-opt]").forEach((el) =>
       el.addEventListener("click", () => {
@@ -1382,6 +1441,10 @@ function applyRewards() {
     s.streak = s.lastActive === yesterday ? s.streak + 1 : 1;
     s.lastActive = today;
   }
+
+  // Track XP earned today for the daily-goal ring.
+  if (s.today && s.today.date === today) s.today.xp += session.xpEarned;
+  else s.today = { date: today, xp: session.xpEarned };
 
   // Any assignment in this student's classrooms for this skill counts as turned in.
   classroomsOf(s.id).forEach((c) =>

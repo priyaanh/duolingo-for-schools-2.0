@@ -41,9 +41,13 @@ no backend.
 ### 🎒 Student mode
 - **Join a class** with the teacher's class code, or pick an existing profile
 - **Assignment inbox** — see what's due (and what's overdue) and start it with one tap
-- **Skill tree** — 8 Spanish skills (Basics, Greetings, Food, Animals, Family, Colors, Numbers, Phrases), each with 3 crown levels
-- **Lesson player** with four exercise types:
-  - Multiple choice (Spanish → English and English → Spanish)
+- **Two courses** — 🇪🇸 Spanish and 🇫🇷 French, 8 skills each (Basics, Greetings, Food, Animals,
+  Family, Colors, Numbers, Phrases) with 3 crown levels per skill; teachers pick the course per
+  classroom (at creation or from the Overview tab)
+- **Daily goal ring** — a 30-XP-per-day target on the student home that fills as you practice
+- **Lesson player** with five exercise types:
+  - Multiple choice (target language → English and English → target language)
+  - **Listening** — tap the speaker, choose what you heard (browser text-to-speech)
   - Type-the-translation
   - Word-bank sentence building with distractor words
   - Tap-the-matching-pairs

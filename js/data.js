@@ -3,10 +3,15 @@
  * All content below is original demo material written for this project.
  */
 
-const COURSE = {
+/* In every course, word/sentence key "es" holds the target-language text
+   (kept as "es" for compatibility) and "en" the English translation. */
+
+const SPANISH = {
   id: "es",
   title: "Spanish",
   flag: "🇪🇸",
+  lang: "es-ES",
+  langName: "Spanish",
   skills: [
     {
       id: "basics",
@@ -178,5 +183,186 @@ const COURSE = {
     }
   ]
 };
+
+const FRENCH = {
+  id: "fr",
+  title: "French",
+  flag: "🇫🇷",
+  lang: "fr-FR",
+  langName: "French",
+  skills: [
+    {
+      id: "fr-basics",
+      title: "Basics",
+      icon: "🧱",
+      words: [
+        { es: "l'homme", en: "the man" },
+        { es: "la femme", en: "the woman" },
+        { es: "le garçon", en: "the boy" },
+        { es: "la fille", en: "the girl" },
+        { es: "je", en: "I" },
+        { es: "tu", en: "you" },
+        { es: "oui", en: "yes" },
+        { es: "non", en: "no" }
+      ],
+      sentences: [
+        { es: "je suis une femme", en: "I am a woman" },
+        { es: "il est un garçon", en: "he is a boy" },
+        { es: "tu es un homme", en: "you are a man" },
+        { es: "elle est une fille", en: "she is a girl" }
+      ]
+    },
+    {
+      id: "fr-greetings",
+      title: "Greetings",
+      icon: "👋",
+      words: [
+        { es: "bonjour", en: "hello" },
+        { es: "au revoir", en: "goodbye" },
+        { es: "merci", en: "thank you" },
+        { es: "s'il vous plaît", en: "please" },
+        { es: "bonsoir", en: "good evening" },
+        { es: "bonne nuit", en: "good night" },
+        { es: "bien", en: "well" },
+        { es: "très", en: "very" }
+      ],
+      sentences: [
+        { es: "bonjour, ça va ?", en: "hello, how are you?" },
+        { es: "merci et au revoir", en: "thank you and goodbye" },
+        { es: "je vais très bien", en: "I am very well" },
+        { es: "bonsoir et bonne nuit", en: "good evening and good night" }
+      ]
+    },
+    {
+      id: "fr-food",
+      title: "Food",
+      icon: "🥐",
+      words: [
+        { es: "la pomme", en: "the apple" },
+        { es: "le pain", en: "the bread" },
+        { es: "le lait", en: "the milk" },
+        { es: "l'eau", en: "the water" },
+        { es: "le café", en: "the coffee" },
+        { es: "le riz", en: "the rice" },
+        { es: "le fruit", en: "the fruit" },
+        { es: "le fromage", en: "the cheese" }
+      ],
+      sentences: [
+        { es: "je mange du pain", en: "I eat bread" },
+        { es: "elle boit du lait", en: "she drinks milk" },
+        { es: "le garçon mange une pomme", en: "the boy eats an apple" },
+        { es: "nous buvons du café", en: "we drink coffee" }
+      ]
+    },
+    {
+      id: "fr-animals",
+      title: "Animals",
+      icon: "🐴",
+      words: [
+        { es: "le chien", en: "the dog" },
+        { es: "le chat", en: "the cat" },
+        { es: "le cheval", en: "the horse" },
+        { es: "l'oiseau", en: "the bird" },
+        { es: "le poisson", en: "the fish" },
+        { es: "la vache", en: "the cow" },
+        { es: "l'ours", en: "the bear" },
+        { es: "la souris", en: "the mouse" }
+      ],
+      sentences: [
+        { es: "le chat boit du lait", en: "the cat drinks milk" },
+        { es: "le chien mange du pain", en: "the dog eats bread" },
+        { es: "j'ai un cheval", en: "I have a horse" },
+        { es: "la vache est grande", en: "the cow is big" }
+      ]
+    },
+    {
+      id: "fr-family",
+      title: "Family",
+      icon: "👪",
+      words: [
+        { es: "la mère", en: "the mother" },
+        { es: "le père", en: "the father" },
+        { es: "le frère", en: "the brother" },
+        { es: "la sœur", en: "the sister" },
+        { es: "la grand-mère", en: "the grandmother" },
+        { es: "le grand-père", en: "the grandfather" },
+        { es: "le fils", en: "the son" },
+        { es: "la fille", en: "the daughter" }
+      ],
+      sentences: [
+        { es: "il est mon frère", en: "he is my brother" },
+        { es: "mon père boit du café", en: "my father drinks coffee" },
+        { es: "la grand-mère mange du pain", en: "the grandmother eats bread" },
+        { es: "ma mère est médecin", en: "my mother is a doctor" }
+      ]
+    },
+    {
+      id: "fr-colors",
+      title: "Colors",
+      icon: "🎨",
+      words: [
+        { es: "rouge", en: "red" },
+        { es: "bleu", en: "blue" },
+        { es: "vert", en: "green" },
+        { es: "jaune", en: "yellow" },
+        { es: "noir", en: "black" },
+        { es: "blanc", en: "white" },
+        { es: "rose", en: "pink" },
+        { es: "marron", en: "brown" }
+      ],
+      sentences: [
+        { es: "le chat est noir", en: "the cat is black" },
+        { es: "la pomme est rouge", en: "the apple is red" },
+        { es: "mon cheval est blanc", en: "my horse is white" },
+        { es: "l'oiseau est bleu", en: "the bird is blue" }
+      ]
+    },
+    {
+      id: "fr-numbers",
+      title: "Numbers",
+      icon: "🔢",
+      words: [
+        { es: "un", en: "one" },
+        { es: "deux", en: "two" },
+        { es: "trois", en: "three" },
+        { es: "quatre", en: "four" },
+        { es: "cinq", en: "five" },
+        { es: "six", en: "six" },
+        { es: "sept", en: "seven" },
+        { es: "huit", en: "eight" }
+      ],
+      sentences: [
+        { es: "j'ai deux chats", en: "I have two cats" },
+        { es: "elle a trois frères", en: "she has three brothers" },
+        { es: "quatre pommes rouges", en: "four red apples" },
+        { es: "cinq grands chiens", en: "five big dogs" }
+      ]
+    },
+    {
+      id: "fr-phrases",
+      title: "Phrases",
+      icon: "💬",
+      words: [
+        { es: "de rien", en: "you are welcome" },
+        { es: "je suis désolé", en: "I am sorry" },
+        { es: "je ne sais pas", en: "I do not know" },
+        { es: "peut-être", en: "maybe" },
+        { es: "à bientôt", en: "see you soon" },
+        { es: "bienvenue", en: "welcome" },
+        { es: "enchanté", en: "nice to meet you" },
+        { es: "bien sûr", en: "of course" }
+      ],
+      sentences: [
+        { es: "je suis désolé, je ne sais pas", en: "I am sorry, I do not know" },
+        { es: "à bientôt, mon frère", en: "see you soon, my brother" },
+        { es: "bienvenue chez moi", en: "welcome to my house" },
+        { es: "enchanté, je suis Ana", en: "nice to meet you, I am Ana" }
+      ]
+    }
+  ]
+};
+
+const COURSES = [SPANISH, FRENCH];
+const COURSE = SPANISH; // default course (back-compat alias)
 
 const STUDENT_AVATARS = ["🦊", "🐼", "🐯", "🐨", "🐸", "🦁", "🐙", "🦄", "🐢", "🐝", "🦉", "🐬"];
