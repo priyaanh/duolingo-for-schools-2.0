@@ -1,0 +1,17 @@
+{
+  "name": "Duolingo for Schools 2.0 (Unofficial)",
+  "short_name": "DFS 2.0",
+  "description": "Unofficial classroom remake: lessons, assignments, XP tracking, and a class leaderboard.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#58cc02",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

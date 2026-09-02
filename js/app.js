@@ -222,6 +222,27 @@ function lockTeacherMode() {
   go({ name: "onboarding" });
 }
 
+// Shared login path for students: checks their personal PIN (if they set one)
+// and remembers them for one-tap "Welcome back" next time. Teachers previewing
+// the student view skip the PIN.
+function loginStudent(id) {
+  const s = getStudent(id);
+  if (!s) return;
+  if (state.role !== "teacher" && s.pinHash) {
+    const p = prompt(`Hi ${s.name}! Enter your PIN:`);
+    if (p === null) return;
+    if (pinHash(p.trim()) !== s.pinHash) return alert("Wrong PIN — ask your teacher to reset it.");
+  }
+  state.activeStudentId = id;
+  if (state.role !== "teacher") {
+    state.role = "student";
+    state.mode = "student";
+    state.lastLogin = { type: "student", id };
+  }
+  save();
+  go({ name: "student-home" });
+}
+
 /* ============================== shell ============================== */
 
 function headerHtml() {
@@ -289,6 +310,21 @@ function renderOnboarding() {
   const hasClasses = state.classrooms.length > 0;
   const hasPin = !!state.teacherPinHash;
 
+  const lastStudent =
+    state.lastLogin && state.lastLogin.type === "student" ? getStudent(state.lastLogin.id) : null;
+  const welcomeBack = lastStudent
+    ? `
+      <div class="card" style="background:var(--green-pale);border-color:var(--green);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span style="font-size:34px;">${lastStudent.avatar}</span>
+        <div style="flex:1;min-width:160px;">
+          <strong style="font-size:17px;">Welcome back, ${esc(lastStudent.name)}!</strong><br/>
+          <span style="color:var(--ink-soft);font-weight:700;font-size:13px;">⚡ ${lastStudent.xp} XP · 🔥 ${lastStudent.streak} day streak</span>
+        </div>
+        <button class="btn small" id="ob-continue">Continue</button>
+        <button class="linkish" id="ob-not-you">Not you?</button>
+      </div>`
+    : "";
+
   const teacherCard = !hasClasses
     ? `
       <div class="card">
@@ -341,8 +377,12 @@ function renderOnboarding() {
       <div class="form-row">
         <input id="ob-code" placeholder="Class code" maxlength="6" style="text-transform:uppercase;width:130px;" />
         <input id="ob-name" placeholder="Your name" maxlength="30" />
+      </div>
+      <div class="form-row">
+        <input id="ob-student-pin" placeholder="Secret PIN (optional)" maxlength="12" inputmode="numeric" style="width:180px;" />
         <button class="btn blue small" id="ob-join-btn">Join class</button>
       </div>
+      <p style="color:var(--ink-soft);font-weight:700;font-size:12px;">A secret PIN stops classmates from opening your profile on a shared computer.</p>
       <p id="ob-join-error" style="color:var(--red);font-weight:700;font-size:13px;"></p>
     </div>`;
 
@@ -352,9 +392,10 @@ function renderOnboarding() {
       <div style="text-align:center;margin:26px 0 26px;">
         <div style="font-size:64px;">🦜</div>
         <h1 style="font-size:30px;font-weight:900;color:var(--green);">Duolingo for Schools 2.0</h1>
-        <p style="color:var(--ink-soft);font-weight:700;">Unofficial remake · Who's here today?</p>
+        <p style="color:var(--ink-soft);font-weight:700;">Unofficial remake · Log in to start learning</p>
       </div>
       <div style="display:grid;gap:16px;">
+        ${welcomeBack}
         ${teacherCard}
         ${studentCard}
         <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
@@ -403,18 +444,31 @@ function renderOnboarding() {
   bind("#ob-join-btn", () => {
     const code = $("#ob-code").value.trim().toUpperCase();
     const name = $("#ob-name").value.trim();
+    const spin = ($("#ob-student-pin") ? $("#ob-student-pin").value : "").trim();
     const err = $("#ob-join-error");
     const c = state.classrooms.find((cl) => cl.code === code);
     if (!c) { err.textContent = "No class found with that code — ask your teacher for it."; return; }
     if (!name) { err.textContent = "Please enter your name."; return; }
-    const s = { id: uid(), name, avatar: pick(STUDENT_AVATARS), xp: 0, streak: 0, lastActive: null, skillLevels: {}, completedAssignments: [] };
+    if (spin && spin.length < 4) { err.textContent = "Your secret PIN needs at least 4 characters (or leave it empty)."; return; }
+    const s = {
+      id: uid(), name, avatar: pick(STUDENT_AVATARS), xp: 0, streak: 0, lastActive: null,
+      skillLevels: {}, completedAssignments: [], pinHash: spin ? pinHash(spin) : null
+    };
     state.students.push(s);
     c.studentIds.push(s.id);
     state.activeStudentId = s.id;
     state.role = "student";
     state.mode = "student";
+    state.lastLogin = { type: "student", id: s.id };
     save();
     go({ name: "student-home" });
+  });
+
+  bind("#ob-continue", () => lastStudent && loginStudent(lastStudent.id));
+  bind("#ob-not-you", () => {
+    state.lastLogin = null;
+    save();
+    go({ name: "onboarding" });
   });
 
   onEnter("#ob-class-name", "#ob-teacher-btn");
@@ -422,6 +476,7 @@ function renderOnboarding() {
   onEnter("#ob-unlock-pin", "#ob-unlock-btn");
   onEnter("#ob-code", "#ob-join-btn");
   onEnter("#ob-name", "#ob-join-btn");
+  onEnter("#ob-student-pin", "#ob-join-btn");
 
   bind("#ob-demo", () => {
     state = seedState();
@@ -430,13 +485,7 @@ function renderOnboarding() {
   });
 
   $$("[data-ob-pick]").forEach((el) =>
-    el.addEventListener("click", () => {
-      state.activeStudentId = el.dataset.obPick;
-      state.role = "student";
-      state.mode = "student";
-      save();
-      go({ name: "student-home" });
-    })
+    el.addEventListener("click", () => loginStudent(el.dataset.obPick))
   );
 }
 
@@ -509,7 +558,7 @@ function renderClassroom() {
   const tab = route.tab || "overview";
   const students = c.studentIds.map(getStudent).filter(Boolean);
 
-  const tabs = ["overview", "students", "assignments", "progress"]
+  const tabs = ["overview", "students", "assignments", "leaderboard", "progress"]
     .map((t) => `<button data-tab="${t}" class="${t === tab ? "active" : ""}">${t}</button>`)
     .join("");
 
@@ -517,6 +566,7 @@ function renderClassroom() {
   if (tab === "overview") body = overviewTab(c, students);
   if (tab === "students") body = studentsTab(c, students);
   if (tab === "assignments") body = assignmentsTab(c, students);
+  if (tab === "leaderboard") body = leaderboardTab(c, students);
   if (tab === "progress") body = progressTab(c, students);
 
   shell(`
@@ -597,7 +647,7 @@ function studentsTab(c, students) {
         <td>🔥 ${s.streak}</td>
         <td>👑 ${crownsOf(s)}</td>
         <td class="${s.lastActive === todayStr() ? "cell-good" : "cell-warn"}">${relativeDay(s.lastActive)}</td>
-        <td><button class="linkish" data-remove="${s.id}">Remove</button></td>
+        <td>${s.pinHash ? `<button class="linkish" data-resetpin="${s.id}">Reset PIN</button>` : ""} <button class="linkish" data-remove="${s.id}">Remove</button></td>
       </tr>`
     )
     .join("");
@@ -660,6 +710,42 @@ function assignmentsTab(c, students) {
     ${list || `<div class="empty">No assignments yet. Create one above!</div>`}`;
 }
 
+function leaderboardTab(c, students) {
+  if (!students.length) return `<div class="empty">No students yet — the podium is waiting!</div>`;
+  const list = students.slice().sort((a, b) => b.xp - a.xp);
+  const top = [list[1], list[0], list[2]]; // visual order: 2nd, 1st, 3rd
+  const cls = ["second", "first", "third"];
+  const standNum = [2, 1, 3];
+  const podium =
+    `<div class="podium">` +
+    top
+      .map((s, i) =>
+        s
+          ? `<div class="slot ${cls[i]}">
+               <div class="avatar-circle" style="font-size:32px;">${s.avatar}</div>
+               <div class="who">${esc(s.name)}</div>
+               <div class="score">⚡ ${s.xp} XP · 🔥 ${s.streak}</div>
+               <div class="stand">${standNum[i]}</div>
+             </div>`
+          : ""
+      )
+      .join("") +
+    `</div>`;
+  const rest = list
+    .slice(3)
+    .map(
+      (s, i) => `
+      <div class="lb-row">
+        <span class="rank">${i + 4}</span>
+        <span class="nm">${s.avatar} ${esc(s.name)}</span>
+        <span class="val">⚡ ${s.xp} XP</span>
+        <span style="font-weight:800;">🔥 ${s.streak}</span>
+      </div>`
+    )
+    .join("");
+  return podium + (rest ? `<div class="lb-list">${rest}</div>` : "");
+}
+
 function progressTab(c, students) {
   if (!students.length) return `<div class="empty">Add students to see their progress here.</div>`;
   const head = COURSE.skills.map((s) => `<th title="${esc(s.title)}">${s.icon}<br/>${esc(s.title)}</th>`).join("");
@@ -706,6 +792,15 @@ function bindClassroomTab(c, students, tab) {
       save();
       go({ name: "classroom", classroomId: c.id, tab: "students" });
     });
+    $$("[data-resetpin]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const s = getStudent(el.dataset.resetpin);
+        if (!s || !confirm(`Remove ${s.name}'s secret PIN so they can log in again?`)) return;
+        s.pinHash = null;
+        save();
+        go({ name: "classroom", classroomId: c.id, tab: "students" });
+      })
+    );
     $$("[data-remove]").forEach((el) =>
       el.addEventListener("click", () => {
         const s = getStudent(el.dataset.remove);
@@ -776,12 +871,7 @@ function renderStudentPick() {
   if (backBtn) backBtn.addEventListener("click", () => go({ name: "onboarding" }));
 
   $$("[data-pick]").forEach((el) =>
-    el.addEventListener("click", () => {
-      state.activeStudentId = el.dataset.pick;
-      if (state.role !== "teacher") state.role = "student"; // teachers previewing keep their role
-      save();
-      go({ name: "student-home" });
-    })
+    el.addEventListener("click", () => loginStudent(el.dataset.pick))
   );
 
   onEnter("#join-code", "#join-btn");
@@ -839,6 +929,25 @@ function renderStudentHome() {
     })
     .join("");
 
+  const classmates = myClasses[0]
+    ? myClasses[0].studentIds.map(getStudent).filter(Boolean).sort((a, b) => b.xp - a.xp).slice(0, 5)
+    : [];
+  const classLeaderboard =
+    classmates.length > 1
+      ? `
+      <h2 class="section-title">🏆 Class leaderboard</h2>
+      <div class="lb-list">${classmates
+        .map(
+          (cs, i) => `
+          <div class="lb-row">
+            <span class="rank">${["🥇", "🥈", "🥉"][i] || i + 1}</span>
+            <span class="nm">${cs.avatar} ${esc(cs.name)}${cs.id === s.id ? " ⭐" : ""}</span>
+            <span class="val">⚡ ${cs.xp} XP</span>
+          </div>`
+        )
+        .join("")}</div>`
+      : "";
+
   const tree = COURSE.skills
     .map((sk) => {
       const lvl = s.skillLevels[sk.id] || 0;
@@ -864,21 +973,42 @@ function renderStudentHome() {
         <span class="pill" title="Total XP">⚡ ${s.xp} XP</span>
         <span class="pill" title="Day streak">🔥 ${s.streak}</span>
         <span class="pill" title="Crowns">👑 ${crownsOf(s)}</span>
-        <button class="linkish" id="switch-student">Switch</button>
+        <button class="linkish" id="student-pin-btn" title="Set or change your secret PIN">🔑 PIN</button>
+        <button class="linkish" id="logout-btn">Log out</button>
       </div>
 
       <h2 class="section-title">📌 Assignments from your teacher</h2>
       ${assignmentCards || `<div class="empty">🎉 Nothing due — you're all caught up!</div>`}
+      ${classLeaderboard}
 
       <h2 class="section-title">${COURSE.flag} ${COURSE.title} — Skill tree</h2>
       <div class="skill-tree">${tree}</div>
     </main>`);
 
-  $("#switch-student").addEventListener("click", () => {
-    state.activeStudentId = null;
-    save();
-    go({ name: "student-pick" });
-  });
+  const logoutBtn = $("#logout-btn");
+  if (logoutBtn)
+    logoutBtn.addEventListener("click", () => {
+      if (state.role !== "teacher") state.role = null; // teacher previews return to their dashboard via the toggle
+      save();
+      go(state.role === "teacher" ? { name: "student-pick" } : { name: "onboarding" });
+    });
+
+  const pinBtn = $("#student-pin-btn");
+  if (pinBtn)
+    pinBtn.addEventListener("click", () => {
+      if (s.pinHash) {
+        const cur = prompt("Current PIN:");
+        if (cur === null) return;
+        if (pinHash(cur.trim()) !== s.pinHash) return alert("Wrong PIN — ask your teacher to reset it.");
+      }
+      const next = prompt("New secret PIN (4+ characters — leave empty to remove it):");
+      if (next === null) return;
+      const t = next.trim();
+      if (t && t.length < 4) return alert("The PIN needs at least 4 characters.");
+      s.pinHash = t ? pinHash(t) : null;
+      save();
+      alert(t ? "PIN saved! You'll need it next time you log in." : "PIN removed.");
+    });
   $$("[data-start-assignment]").forEach((el) =>
     el.addEventListener("click", () => startLesson(el.dataset.skill, el.dataset.startAssignment))
   );
@@ -1023,7 +1153,7 @@ function renderLesson() {
     </main>
     <div class="lesson-footer" id="lesson-footer">
       <div class="inner">
-        <div class="msg" id="footer-msg"></div>
+        <div class="msg" id="footer-msg"><span style="color:var(--ink-soft);font-weight:700;font-size:12px;">⌨️ Tip: press 1–4 to answer, Enter to check &amp; continue</span></div>
         <button class="btn" id="check-btn" ${ex.kind === "match" ? "style='visibility:hidden'" : "disabled"}>Check</button>
       </div>
     </div>`,
@@ -1242,6 +1372,27 @@ function renderLessonFailed() {
   $("#home-btn").addEventListener("click", () => {
     session = null;
     go({ name: "student-home" });
+  });
+}
+
+/* ============================== keyboard shortcuts ============================== */
+
+// In lessons: number keys pick an answer, Enter checks / continues.
+// Registered once at boot, so re-renders never stack duplicate listeners.
+if (typeof document.addEventListener === "function") {
+  document.addEventListener("keydown", (e) => {
+    if (route.name !== "lesson") return;
+    if (e.key === "Enter") {
+      if (e.target && e.target.tagName === "INPUT") return; // the type exercise handles its own Enter
+      const btn = $("#check-btn");
+      if (btn && !btn.disabled && btn.style.visibility !== "hidden") btn.click();
+      return;
+    }
+    const n = Number(e.key);
+    if (n >= 1 && n <= 4) {
+      const opts = $$(".option");
+      if (opts[n - 1] && !opts[n - 1].disabled) opts[n - 1].click();
+    }
   });
 }
 
