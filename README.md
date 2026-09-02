@@ -41,9 +41,9 @@ no backend.
 - **Gamification** — hearts ❤️ (3 per lesson, missed questions are re-queued), XP with a perfect-lesson bonus, daily streaks, and crowns
 - Completing a lesson automatically **turns in** any matching assignment, visible instantly on the teacher's dashboard
 
-Everything persists in `localStorage`, and the app ships with a seeded demo classroom
-(*Spanish 1 — Period 3*) so both dashboards are interesting from the first load.
-Use **Reset demo** in the header to start fresh.
+Everything persists in `localStorage`. The start screen's **Load the demo classroom** link
+seeds a sample class (*Spanish 1 — Period 3*) so both dashboards are interesting immediately,
+and **Reset** in the header erases everything on the device and returns to the start screen.
 
 ## 📈 Real XP tracker (track actual Duolingo accounts)
 

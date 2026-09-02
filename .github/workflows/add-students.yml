@@ -41,4 +41,4 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add data/usernames.json data/xp-history.json
           git diff --cached --quiet || git commit -m "Add students to tracker"
-          git push
+          for i in 1 2 3; do git push && break || { git pull --rebase; sleep 3; }; done

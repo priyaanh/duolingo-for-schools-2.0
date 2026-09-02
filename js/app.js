@@ -56,6 +56,13 @@ const normalize = (s) =>
 
 const skillById = (id) => COURSE.skills.find((s) => s.id === id);
 
+// Pressing Enter in an input clicks its submit button.
+function onEnter(inputSel, btnSel) {
+  const input = $(inputSel);
+  const btn = $(btnSel);
+  if (input && btn) input.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
+}
+
 function classCode() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let out = "";
@@ -410,6 +417,12 @@ function renderOnboarding() {
     go({ name: "student-home" });
   });
 
+  onEnter("#ob-class-name", "#ob-teacher-btn");
+  onEnter("#ob-pin", "#ob-teacher-btn");
+  onEnter("#ob-unlock-pin", "#ob-unlock-btn");
+  onEnter("#ob-code", "#ob-join-btn");
+  onEnter("#ob-name", "#ob-join-btn");
+
   bind("#ob-demo", () => {
     state = seedState();
     save();
@@ -521,6 +534,18 @@ function renderClassroom() {
   $$("[data-tab]").forEach((el) =>
     el.addEventListener("click", () => go({ name: "classroom", classroomId: c.id, tab: el.dataset.tab }))
   );
+  const copyBtn = $("#copy-code-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(c.code);
+        copyBtn.textContent = "✅ Copied!";
+      } catch (e) {
+        copyBtn.textContent = c.code; // clipboard blocked — show the code on the button itself
+      }
+      setTimeout(() => { copyBtn.textContent = "📋 Copy code"; }, 1500);
+    });
+  }
   bindClassroomTab(c, students, tab);
 }
 
@@ -558,6 +583,7 @@ function overviewTab(c, students) {
         Students open the app, switch to <strong>Student</strong> mode, and join with this class code:
       </p>
       <span class="code-box">${esc(c.code)}</span>
+      <button class="btn ghost small" id="copy-code-btn" style="margin-left:10px;">📋 Copy code</button>
     </div>`;
 }
 
@@ -660,6 +686,7 @@ function progressTab(c, students) {
 
 function bindClassroomTab(c, students, tab) {
   if (tab === "students") {
+    onEnter("#new-student-name", "#add-student-btn");
     $("#add-student-btn").addEventListener("click", () => {
       const input = $("#new-student-name");
       const name = input.value.trim();
@@ -757,6 +784,8 @@ function renderStudentPick() {
     })
   );
 
+  onEnter("#join-code", "#join-btn");
+  onEnter("#join-name", "#join-btn");
   $("#join-btn").addEventListener("click", () => {
     const code = $("#join-code").value.trim().toUpperCase();
     const name = $("#join-name").value.trim();
