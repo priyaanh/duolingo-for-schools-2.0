@@ -1,4 +1,4 @@
 {
-  "_help": "Add each class member's real Duolingo username to the list below (profiles must not be private). Example: \"usernames\": [\"alice123\", \"bob_learns\"]",
-  "usernames": []
+  "_help": "Add each class member's real Duolingo username to the list below (profiles must not be private). Example: \"usernames\": [\"alice123\", \"bob_learns\"]. The \"Duolingo\" entry is a demo profile - replace it with your class.",
+  "usernames": ["Duolingo"]
 }
