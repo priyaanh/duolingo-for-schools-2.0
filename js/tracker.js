@@ -19,7 +19,17 @@ const escT = (s) =>
 
 const fmt = (n) => n.toLocaleString("en-US");
 
-// Monday of the week containing dateStr (all math in UTC to avoid TZ drift)
+// Weeks run Monday 00:00 through Sunday 23:59 in this timezone; snapshot dates
+// are already labeled with the Pacific day they represent (see track-xp.mjs).
+const TIMEZONE = "America/Los_Angeles";
+const todayLocal = () => new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE });
+
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// Monday of the week containing dateStr (pure calendar math on the label)
 function weekStart(dateStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
@@ -261,7 +271,7 @@ function setupHelp(reason) {
       <ol>
         <li>Use the <strong>Add yourself</strong> box above, or edit <code>data/usernames.json</code> in the repo to list everyone's real Duolingo usernames (profiles must not be set to private).</li>
         <li>On GitHub, open the <strong>Actions</strong> tab and enable workflows if asked.</li>
-        <li>Run the <strong>Track Duolingo XP</strong> workflow once by hand (Run workflow ▸ main). After that it runs automatically every day at 06:00 UTC.</li>
+        <li>Run the <strong>Track Duolingo XP</strong> workflow once by hand (Run workflow ▸ main). After that it runs automatically every night just after midnight Pacific time.</li>
         <li>Refresh this page — weekly XP appears as soon as the first snapshot is committed.</li>
       </ol>
     </div>`;
@@ -279,7 +289,7 @@ function render(cfg, history) {
 
   const head = `<div class="page-head"><h1>📈 Class XP Tracker</h1>` +
     (snaps.length
-      ? `<span class="sub">Real Duolingo XP, snapshotted daily · last update: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks start on Monday (UTC)</span>`
+      ? `<span class="sub">Real Duolingo XP, snapshotted nightly · latest full day: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks run Monday–Sunday, Pacific time</span>`
       : "") +
     `</div>`;
 
@@ -331,8 +341,11 @@ function render(cfg, history) {
     return Math.max(0, end - start);
   }
 
-  const thisWeek = weeks[weeks.length - 1];
-  const lastWeek = weeks.length > 1 ? weeks[weeks.length - 2] : null;
+  // "This week" is the real current Mon-Sun week (Pacific), not just the newest
+  // snapshot's week — so on Monday the leaderboard starts fresh instead of
+  // re-showing the week that just closed.
+  const thisWeek = weekStart(todayLocal());
+  const lastWeek = addDays(thisWeek, -7);
 
   const rows = allUsers
     .map((u) => {
@@ -344,7 +357,7 @@ function render(cfg, history) {
         totalXp: info ? info.totalXp : null,
         streak: info ? info.streak : null,
         thisWeek: weeklyGain(u, thisWeek),
-        lastWeek: lastWeek ? weeklyGain(u, lastWeek) : null
+        lastWeek: weeklyGain(u, lastWeek)
       };
     })
     .sort((a, b) => (b.thisWeek ?? -1) - (a.thisWeek ?? -1));

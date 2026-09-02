@@ -40,11 +40,16 @@ Use **Reset demo** in the header to start fresh.
 Since Duolingo for Schools is shutting down, this repo also includes a **real XP tracker** so a
 teacher can keep seeing how much XP each student earns per week on the *real* Duolingo app:
 
-- A GitHub Action ([.github/workflows/track-xp.yml](.github/workflows/track-xp.yml)) runs daily
-  at 06:00 UTC, reads each student's **public** Duolingo profile (total XP and streak only),
-  and commits a snapshot to [data/xp-history.json](data/xp-history.json).
+- A GitHub Action ([.github/workflows/track-xp.yml](.github/workflows/track-xp.yml)) runs every
+  night just after midnight Pacific time, reads each student's **public** Duolingo profile
+  (total XP and streak only), and commits a snapshot of the day that just ended to
+  [data/xp-history.json](data/xp-history.json).
 - [tracker.html](tracker.html) turns those snapshots into a weekly leaderboard: XP this week,
-  XP last week, weekly history per student, class totals, and streaks. Weeks start Monday (UTC).
+  XP last week, weekly history per student, class totals, and streaks. **Weeks run Monday
+  00:00 through Sunday 23:59, US Pacific time** — the Sunday-night snapshot closes the week.
+  (Different timezone? Change `TIMEZONE` in [scripts/track-xp.mjs](scripts/track-xp.mjs) and
+  [js/tracker.js](js/tracker.js), and shift the cron in the workflow to just after your local
+  midnight.)
 
 ### Adding the class (no student accounts needed)
 

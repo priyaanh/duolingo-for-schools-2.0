@@ -20,7 +20,13 @@ try {
   history = { snapshots: [] };
 }
 
-const today = new Date().toISOString().slice(0, 10);
+// Label each snapshot with the Pacific-time day it represents: the nightly run
+// fires just after midnight Pacific and records the day that just ended, so
+// weeks close exactly at Sunday midnight. Any capture before 4 AM Pacific
+// counts toward the previous day; a mid-day manual run is labeled with the
+// current (partial) day and gets replaced by that night's full snapshot.
+const TIMEZONE = "America/Los_Angeles";
+const today = new Date(Date.now() - 4 * 3600 * 1000).toLocaleDateString("en-CA", { timeZone: TIMEZONE });
 const users = {};
 let failures = 0;
 

@@ -2,7 +2,7 @@ name: Track Duolingo XP
 
 on:
   schedule:
-    - cron: "0 6 * * *" # daily at 06:00 UTC
+    - cron: "10 8 * * *" # 08:10 UTC = 00:10 PST / 01:10 PDT — just after midnight Pacific, so each snapshot captures the full day that ended
   workflow_dispatch: {}
 
 permissions:
