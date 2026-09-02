@@ -1,0 +1,44 @@
+name: Add students
+
+on:
+  workflow_dispatch:
+    inputs:
+      usernames:
+        description: "Duolingo usernames to add — separate with spaces or commas"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tracker-writes
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate and add usernames
+        id: add
+        run: node scripts/add-usernames.mjs
+        env:
+          USERNAMES: ${{ inputs.usernames }}
+
+      - name: Take fresh snapshot
+        if: steps.add.outputs.added != '0'
+        run: node scripts/track-xp.mjs
+
+      - name: Commit
+        if: steps.add.outputs.added != '0'
+        run: |
+          git config user.name "xp-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/usernames.json data/xp-history.json
+          git diff --cached --quiet || git commit -m "Add students to tracker"
+          git push

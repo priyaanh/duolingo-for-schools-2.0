@@ -114,9 +114,10 @@ function joinBoxHtml() {
       </div>
       <div id="join-result"></div>
       <p style="font-weight:700;color:var(--ink-soft);font-size:13px;margin-top:8px;">
-        <strong>Join the class tracker</strong> opens a prefilled GitHub issue (free account needed) —
-        a robot adds you within a minute or two and this page updates by itself.
-        No GitHub account? Ask whoever runs this repo to add you to <code>data/usernames.json</code>.
+        <strong>No account needed:</strong> just give your Duolingo username to whoever runs this
+        tracker — they paste it into the <em>Add students</em> button on GitHub and you're on within
+        a minute. Already have a GitHub account? <strong>Join the class tracker</strong> files the
+        request for you automatically instead.
       </p>
     </div>`;
 }
@@ -157,14 +158,14 @@ function bindJoinBox(trackedLower) {
           — ⚡ ${fmt(info.totalXp ?? 0)} total XP · 🔥 ${fmt(info.streak ?? 0)} day streak
           ${already
             ? `<div style="margin-top:6px;">✅ Already on the class tracker below.</div>`
-            : `<div style="margin-top:6px;">Not on the class tracker yet — press <strong>Join the class tracker</strong> to be added permanently.</div>`}
+            : `<div style="margin-top:6px;">Not on the class tracker yet — give this username to whoever runs the tracker (no account needed), or press <strong>Join the class tracker</strong> if you have a GitHub account.</div>`}
         </div>`);
       addLiveRow(info, trackedLower);
     } catch (e) {
       if (e && e.notFound) {
         setJoinResult(`<p style="color:var(--red);font-weight:800;">No public Duolingo profile called “${escT(u)}” was found — check the spelling, and make sure the profile isn't private.</p>`);
       } else {
-        setJoinResult(`<p class="muted" style="font-weight:700;">Live preview isn't available right now (the free relay services this page uses are down). You can still press <strong>Join the class tracker</strong> — your XP will show up here about a minute after you submit.</p>`);
+        setJoinResult(`<p class="muted" style="font-weight:700;">Live preview isn't available right now (the free relay services this page uses are down). You can still be added: give your username to whoever runs the tracker (no account needed), or press <strong>Join the class tracker</strong> if you have a GitHub account — your XP shows up here about a minute later either way.</p>`);
       }
     } finally {
       btn.disabled = false;

@@ -46,20 +46,27 @@ teacher can keep seeing how much XP each student earns per week on the *real* Du
 - [tracker.html](tracker.html) turns those snapshots into a weekly leaderboard: XP this week,
   XP last week, weekly history per student, class totals, and streaks. Weeks start Monday (UTC).
 
-### Students add themselves
+### Adding the class (no student accounts needed)
 
-Anyone can join straight from the tracker page — no repo access needed:
+Classmates don't need GitHub — they just tell whoever runs the repo their Duolingo username.
+The owner then adds everyone in one paste:
 
-1. Open the tracker page and type your Duolingo username into the **Add yourself** box.
-   **Show my XP** gives an instant preview when the free relay services are up.
-2. Press **Join the class tracker** — it opens a prefilled GitHub issue titled `join: <username>`
-   (a free GitHub account is needed to submit it). The
-   [Join tracker workflow](.github/workflows/join.yml) verifies the profile with Duolingo,
-   adds it to [data/usernames.json](data/usernames.json), takes an immediate XP snapshot,
-   replies on the issue, and closes it. The tracker page polls and refreshes itself once
-   the data lands (about a minute).
-3. No GitHub account? The repo owner can add usernames to
-   [data/usernames.json](data/usernames.json) directly.
+1. Open the repo's **Actions** tab → **Add students** → **Run workflow**.
+2. Paste the usernames (separated by spaces or commas) and press **Run workflow**.
+3. The workflow checks each name against Duolingo (skipping typos, duplicates, and private
+   profiles with a per-name explanation in the run summary), adds the valid ones to
+   [data/usernames.json](data/usernames.json), and records everyone's XP immediately.
+   The tracker page updates within a minute or two.
+
+Students can also preview their XP anytime with the **Show my XP** box on the tracker page.
+
+### Optional: self-serve joining (needs a GitHub account)
+
+Anyone **with** a free GitHub account can add themselves: the **Join the class tracker** button
+opens a prefilled issue titled `join: <username>`, and the
+[Join tracker workflow](.github/workflows/join.yml) verifies the profile, enrolls it, takes an
+immediate snapshot, replies, and closes the issue. The tracker page polls and refreshes itself
+once the data lands.
 
 ### Setup (one time)
 
