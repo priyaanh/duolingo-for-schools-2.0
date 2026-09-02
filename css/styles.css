@@ -560,6 +560,53 @@ tr + tr td { border-top: 1px solid var(--line); }
   font-weight: 700;
 }
 
+/* ---------- Podium leaderboard ---------- */
+
+.lb-toggle { margin-bottom: 18px; display: inline-flex; }
+
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 22px; }
+.podium .slot { flex: 1; max-width: 170px; text-align: center; }
+
+.podium .avatar-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 900;
+  margin: 0 auto 8px;
+  background: var(--blue-pale);
+  color: var(--blue-dark);
+  border: 3px solid var(--blue);
+}
+
+.podium .who { font-weight: 900; font-size: 15px; overflow-wrap: anywhere; }
+.podium .score { font-weight: 800; color: var(--ink-soft); font-size: 13px; margin-bottom: 8px; }
+
+.podium .stand {
+  border-radius: 12px 12px 0 0;
+  font-size: 28px;
+  font-weight: 900;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.podium .first .stand { height: 96px; background: var(--yellow); }
+.podium .second .stand { height: 72px; background: #b7bdc4; }
+.podium .third .stand { height: 56px; background: #d29b6c; }
+.podium .first .avatar-circle { border-color: var(--yellow); background: #fff3c4; color: #946f00; }
+
+.lb-list { border: 2px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.lb-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; font-weight: 800; }
+.lb-row + .lb-row { border-top: 1px solid var(--line); }
+.lb-row .rank { width: 28px; color: var(--ink-soft); }
+.lb-row .nm { flex: 1; overflow-wrap: anywhere; }
+.lb-row .val { color: var(--green-dark); }
+
 footer.site {
   text-align: center;
   padding: 20px;

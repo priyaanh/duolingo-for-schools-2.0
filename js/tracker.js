@@ -365,6 +365,68 @@ function render(cfg, history) {
   const bestThisWeek = Math.max(0, ...rows.map((r) => r.thisWeek ?? 0));
   const classThisWeek = rows.reduce((a, r) => a + (r.thisWeek || 0), 0);
 
+  /* ----- podium leaderboard (This week / All time toggle) ----- */
+
+  const ranked = rows.filter((r) => r.tracked);
+
+  const lbValue = (r, mode) =>
+    mode === "week" ? (r.thisWeek === null ? "—" : `⚡ ${fmt(r.thisWeek)}`) : `⚡ ${fmt(r.totalXp ?? 0)}`;
+
+  function lbInner(mode) {
+    if (!ranked.length) return `<div class="empty">No tracked students yet — add some above!</div>`;
+    const list = ranked.slice().sort((a, b) =>
+      mode === "week"
+        ? ((b.thisWeek ?? -1) - (a.thisWeek ?? -1)) || ((b.totalXp ?? 0) - (a.totalXp ?? 0))
+        : ((b.totalXp ?? 0) - (a.totalXp ?? 0))
+    );
+    const top = [list[1], list[0], list[2]]; // visual order: 2nd, 1st, 3rd
+    const cls = ["second", "first", "third"];
+    const standNum = [2, 1, 3];
+    const podium =
+      `<div class="podium">` +
+      top
+        .map((r, i) =>
+          r
+            ? `<div class="slot ${cls[i]}">
+                 <div class="avatar-circle">${escT((r.name || "?").trim().charAt(0).toUpperCase() || "?")}</div>
+                 <div class="who">${isMine(r.username) ? "⭐ " : ""}${escT(r.name)}</div>
+                 <div class="score">${lbValue(r, mode)}</div>
+                 <div class="stand">${standNum[i]}</div>
+               </div>`
+            : ""
+        )
+        .join("") +
+      `</div>`;
+    const rest = list
+      .slice(3)
+      .map(
+        (r, i) => `
+        <div class="lb-row">
+          <span class="rank">${i + 4}</span>
+          <span class="nm">${isMine(r.username) ? "⭐ " : ""}${escT(r.name)} <span class="muted">@${escT(r.username)}</span></span>
+          <span class="val">${lbValue(r, mode)}</span>
+        </div>`
+      )
+      .join("");
+    return `
+      <div class="mode-switch lb-toggle">
+        <button id="lb-week-btn" class="${mode === "week" ? "active" : ""}">This week</button>
+        <button id="lb-all-btn" class="${mode === "all" ? "active" : ""}">All time</button>
+      </div>
+      ${podium}
+      ${rest ? `<div class="lb-list">${rest}</div>` : ""}`;
+  }
+
+  function mountLeaderboard(mode) {
+    const box = document.getElementById("lb-section");
+    if (!box) return;
+    box.innerHTML = lbInner(mode);
+    const wb = document.getElementById("lb-week-btn");
+    const ab = document.getElementById("lb-all-btn");
+    if (wb && wb.addEventListener) wb.addEventListener("click", () => mountLeaderboard("week"));
+    if (ab && ab.addEventListener) ab.addEventListener("click", () => mountLeaderboard("all"));
+  }
+
   const leaderboard = rows
     .map((r, i) => {
       if (!r.tracked)
@@ -411,7 +473,10 @@ function render(cfg, history) {
       <div class="stat"><div class="num">${weeks.length}</div><div class="lbl">Weeks recorded</div></div>
     </div>
 
-    <h2 class="section-title">🏆 This week's leaderboard</h2>
+    <h2 class="section-title">🏆 Leaderboard</h2>
+    <div id="lb-section"></div>
+
+    <h2 class="section-title">📋 Weekly details</h2>
     <div class="table-wrap"><table>
       <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th></tr></thead>
       <tbody id="leaderboard-body">${leaderboard}</tbody>
@@ -426,6 +491,7 @@ function render(cfg, history) {
       </tbody>
     </table></div>`;
 
+  mountLeaderboard("week");
   bindJoinBox(trackedLower);
   resumeWatchIfPending(trackedLower);
   renderLiveRows(trackedLower);
