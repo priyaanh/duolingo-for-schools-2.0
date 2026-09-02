@@ -269,6 +269,85 @@ async function renderLiveRows(trackedLower) {
   }
 }
 
+/* -------------------- daily XP chart -------------------- */
+
+function niceCeil(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+}
+
+const shortDay = (dateStr) => {
+  const [, m, d] = dateStr.split("-").map(Number);
+  return `${m}/${d}`;
+};
+
+// Class XP earned per day (sum of per-student gains between consecutive
+// snapshots), last 14 days, as a single-series bar chart. The weekly history
+// table below is the accessible table view of the same data.
+function dailyChartHtml(snaps) {
+  if (snaps.length < 2) return "";
+  const days = [];
+  for (let i = 1; i < snaps.length; i++) {
+    const prev = snaps[i - 1].users, cur = snaps[i].users;
+    let gain = 0;
+    Object.keys(cur).forEach((u) => { if (u in prev) gain += Math.max(0, cur[u].totalXp - prev[u].totalXp); });
+    days.push({ date: snaps[i].date, gain });
+  }
+  const recent = days.slice(-14);
+  const max = Math.max(...recent.map((d) => d.gain));
+  const title = `<h2 class="section-title">📊 XP per day — whole class</h2>`;
+  if (max === 0) {
+    return `${title}<div class="empty">No XP earned between snapshots yet — this chart fills in as the class practices.</div>`;
+  }
+  const W = 700, H = 190, padL = 46, padR = 8, padT = 20, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const step = plotW / recent.length;
+  const bw = Math.max(6, Math.min(48, step - 4)); // >=4px gap between bars
+  const yMax = niceCeil(max);
+  const yOf = (v) => padT + plotH - (v / yMax) * plotH;
+  const baseY = padT + plotH;
+  const peakIdx = recent.findIndex((d) => d.gain === max);
+
+  const grid = [yMax, yMax / 2]
+    .map((v) => `
+      <line x1="${padL}" y1="${yOf(v)}" x2="${W - padR}" y2="${yOf(v)}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${padL - 6}" y="${yOf(v) + 3.5}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${fmt(v)}</text>`)
+    .join("");
+
+  const labelEvery = Math.ceil(recent.length / 7);
+  const bars = recent
+    .map((d, i) => {
+      const x = padL + i * step + (step - bw) / 2;
+      const yTop = yOf(d.gain);
+      const h = baseY - yTop;
+      const r = Math.min(4, bw / 2, h);
+      const shape = h <= 0.5
+        ? `<line x1="${x}" y1="${baseY}" x2="${x + bw}" y2="${baseY}" stroke="var(--line)" stroke-width="2"/>`
+        : `<path class="xp-bar" d="M${x},${baseY} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} L${x + bw - r},${yTop} Q${x + bw},${yTop} ${x + bw},${yTop + r} L${x + bw},${baseY} Z" fill="#46a302">
+             <title>${escT(shortDay(d.date))} — ${fmt(d.gain)} XP</title>
+           </path>`;
+      const xLabel = i % labelEvery === 0
+        ? `<text x="${x + bw / 2}" y="${baseY + 16}" text-anchor="middle" font-size="10" fill="var(--ink-soft)">${escT(shortDay(d.date))}</text>`
+        : "";
+      const peakLabel = i === peakIdx
+        ? `<text x="${x + bw / 2}" y="${yTop - 5}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">${fmt(d.gain)}</text>`
+        : "";
+      return shape + xLabel + peakLabel;
+    })
+    .join("");
+
+  return `
+    ${title}
+    <div class="card" style="padding:14px 14px 8px;">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" role="img" aria-label="Class XP earned per day, last ${recent.length} days">
+        ${grid}
+        <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="var(--ink-soft)" stroke-width="1"/>
+        ${bars}
+      </svg>
+    </div>`;
+}
+
 /* -------------------- setup help -------------------- */
 
 function setupHelp(reason) {
@@ -482,6 +561,8 @@ function render(cfg, history) {
 
     <h2 class="section-title">🏆 Leaderboard</h2>
     <div id="lb-section"></div>
+
+    ${dailyChartHtml(snaps)}
 
     ${joinBoxHtml()}
 

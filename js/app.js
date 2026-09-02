@@ -56,6 +56,46 @@ const normalize = (s) =>
 
 const skillById = (id) => COURSE.skills.find((s) => s.id === id);
 
+/* ---------- sound & speech (all best-effort; muted flag persists) ---------- */
+
+const MUTE_KEY = "dfs2-muted";
+let muted = false;
+try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch (e) { /* fine */ }
+let audioCtx = null;
+
+function beep(freq, delay, dur, type = "sine", vol = 0.12) {
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  o.connect(g);
+  g.connect(audioCtx.destination);
+  const t = audioCtx.currentTime + delay;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
+const playCorrect = () => { if (!muted) try { beep(660, 0, 0.12); beep(880, 0.13, 0.2); } catch (e) { /* no audio */ } };
+const playWrong = () => { if (!muted) try { beep(220, 0, 0.18, "triangle", 0.1); beep(160, 0.18, 0.25, "triangle", 0.1); } catch (e) { /* no audio */ } };
+const playBlip = () => { if (!muted) try { beep(784, 0, 0.09, "sine", 0.1); } catch (e) { /* no audio */ } };
+const playFanfare = () => { if (!muted) try { beep(523, 0, 0.12); beep(659, 0.12, 0.12); beep(784, 0.24, 0.3); } catch (e) { /* no audio */ } };
+
+function speak(text, lang) {
+  if (muted) return;
+  try {
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang || "es-ES";
+    u.rate = 0.9;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  } catch (e) { /* no speech support — fine */ }
+}
+
 // Pressing Enter in an input clicks its submit button.
 function onEnter(inputSel, btnSel) {
   const input = $(inputSel);
@@ -1054,7 +1094,9 @@ function makeChoice(word, skill, dir) {
     label: isEsEn ? 'Select the meaning of the Spanish word' : "Select the Spanish translation",
     prompt: isEsEn ? word.es : word.en,
     options: shuffle([answer, ...distractors]),
-    answer
+    answer,
+    speak: isEsEn ? word.es : word.en,
+    speakLang: isEsEn ? "es-ES" : "en-US"
   };
 }
 
@@ -1063,7 +1105,9 @@ function makeType(word) {
     kind: "type",
     label: "Type the English translation",
     prompt: word.es,
-    answer: word.en
+    answer: word.en,
+    speak: word.es,
+    speakLang: "es-ES"
   };
 }
 
@@ -1078,7 +1122,9 @@ function makeBank(sentence, allWords) {
     label: "Translate this sentence",
     prompt: sentence.es,
     bank,
-    answer: tokens.join(" ")
+    answer: tokens.join(" "),
+    speak: sentence.es,
+    speakLang: "es-ES"
   };
 }
 
@@ -1144,11 +1190,12 @@ function renderLesson() {
     <div class="lesson-top">
       <button class="quit" id="quit-btn" title="Quit lesson">✕</button>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <button class="quit" id="mute-btn" title="Turn sounds on or off">${muted ? "🔇" : "🔊"}</button>
       <span class="hearts">${"❤️".repeat(session.hearts)}${"🖤".repeat(3 - session.hearts)}</span>
     </div>
     <main class="lesson-body">
       <div class="exercise-kind">${esc(ex.label)}</div>
-      ${ex.kind !== "match" ? `<div class="prompt"><span class="speak">🔊</span>${esc(ex.prompt)}</div>` : ""}
+      ${ex.kind !== "match" ? `<div class="prompt">${ex.speak ? `<button class="speak-btn" id="speak-btn" title="Listen">🔊</button>` : ""}${esc(ex.prompt)}</div>` : ""}
       ${body}
     </main>
     <div class="lesson-footer" id="lesson-footer">
@@ -1166,6 +1213,18 @@ function renderLesson() {
       go({ name: "student-home" });
     }
   });
+
+  const muteBtn = $("#mute-btn");
+  if (muteBtn)
+    muteBtn.addEventListener("click", () => {
+      muted = !muted;
+      try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) { /* fine */ }
+      try { if (muted && window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* fine */ }
+      muteBtn.textContent = muted ? "🔇" : "🔊";
+    });
+
+  const speakBtn = $("#speak-btn");
+  if (speakBtn) speakBtn.addEventListener("click", () => speak(ex.speak, ex.speakLang));
 
   bindExercise(ex);
 }
@@ -1261,10 +1320,12 @@ function bindExercise(ex) {
             selectedLeft = null;
             matched++;
             if (matched === ex.pairs.length) gradeAnswer(true, null);
+            else playBlip();
           } else {
             el.classList.add("shake");
             setTimeout(() => el.classList.remove("shake"), 350);
             session.mistakes++;
+            playWrong();
           }
         }
       })
@@ -1278,11 +1339,13 @@ function gradeAnswer(ok, correctAnswer) {
   const checkBtn = $("#check-btn");
 
   if (ok) {
+    playCorrect();
     session.correct++;
     session.queue.shift();
     footer.classList.add("good");
     msg.innerHTML = `<div class="headline">${pick(["Nicely done!", "Excellent!", "Correct!", "Great job!"])}</div>`;
   } else {
+    playWrong();
     session.mistakes++;
     session.hearts--;
     footer.classList.add("bad");
@@ -1333,10 +1396,17 @@ function applyRewards() {
 
 function renderLessonComplete() {
   applyRewards();
+  playFanfare();
   const skill = skillById(session.skillId);
   const perfect = session.mistakes === 0;
+  const confetti = Array.from(
+    { length: 18 },
+    () =>
+      `<span style="left:${Math.floor(Math.random() * 100)}%;animation-delay:${(Math.random() * 0.9).toFixed(2)}s;font-size:${18 + Math.floor(Math.random() * 18)}px;">${pick(["🎉", "✨", "⭐", "🎊"])}</span>`
+  ).join("");
   shell(
     `
+    <div class="confetti" aria-hidden="true">${confetti}</div>
     <div class="finish">
       <div class="big">${perfect ? "🏆" : "🎉"}</div>
       <h1>Lesson complete!</h1>
