@@ -12,6 +12,16 @@ no backend.
 
 ## ✨ Features
 
+### 🚪 Start screen & roles
+- On first visit, everyone picks a role: **teacher** (set up a classroom, optionally lock the
+  dashboard with a PIN) or **student** (join with a class code, or pick an existing profile)
+- Students never see the teacher dashboard; opening it requires the teacher PIN
+- Teachers can preview the student view, **🔒 Lock** the dashboard when handing a device to
+  students, and set or change the PIN anytime from the dashboard
+- A **Load the demo classroom** link seeds sample data for anyone who just wants to explore
+- Note: the app is fully client-side, so the PIN is a classroom-level lock (it keeps students
+  out of the dashboard on a shared device), not real authentication
+
 ### 🍎 Teacher mode
 - **Classrooms** — create classrooms, each with a shareable 6-character class code
 - **Overview dashboard** — students, total XP, active-today count, average crowns

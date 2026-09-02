@@ -15,6 +15,14 @@ const esc = (s) =>
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 
+// Light obfuscation for the teacher PIN — this is a classroom lock, not real
+// security (everything lives in the browser; there is no server to enforce it).
+const pinHash = (s) => {
+  let h = 5381;
+  for (const c of String(s)) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  return h;
+};
+
 const isoDate = (d) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -75,6 +83,18 @@ function dueLabel(dateStr) {
 
 const STORAGE_KEY = "dfs2-state-v1";
 
+// Fresh install: no role chosen yet — the start screen decides.
+function emptyState() {
+  return {
+    mode: "teacher",
+    role: null, // null (start screen) | "teacher" | "student"
+    teacherPinHash: null,
+    activeStudentId: null,
+    classrooms: [],
+    students: []
+  };
+}
+
 function seedState() {
   const mk = (name, avatar, xp, streak, lastActiveDaysAgo, levels, done) => ({
     id: uid(),
@@ -110,6 +130,8 @@ function seedState() {
 
   return {
     mode: "teacher",
+    role: "teacher", // demo loads straight into the teacher dashboard, no PIN
+    teacherPinHash: null,
     activeStudentId: null,
     classrooms: [classroom],
     students
@@ -121,12 +143,17 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.classrooms) && Array.isArray(parsed.students)) return parsed;
+      if (parsed && Array.isArray(parsed.classrooms) && Array.isArray(parsed.students)) {
+        // Migrate pre-role saves: keep the data, let the start screen assign a role.
+        if (parsed.role === undefined) parsed.role = null;
+        if (parsed.teacherPinHash === undefined) parsed.teacherPinHash = null;
+        return parsed;
+      }
     }
   } catch (e) {
-    /* corrupted or unavailable storage — fall through to a fresh seed */
+    /* corrupted or unavailable storage — fall through to a fresh start */
   }
-  return seedState();
+  return emptyState();
 }
 
 let state = loadState();
@@ -156,6 +183,7 @@ function go(r) {
 }
 
 function setMode(mode) {
+  if (mode === "teacher" && state.role !== "teacher") return requestTeacherAccess();
   state.mode = mode;
   save();
   if (mode === "teacher") go({ name: "teacher-home" });
@@ -163,10 +191,42 @@ function setMode(mode) {
   else go({ name: "student-pick" });
 }
 
+// Teacher mode is PIN-locked once a PIN exists. Client-side only — it keeps
+// students out of the dashboard on a shared device, nothing more.
+function requestTeacherAccess() {
+  if (state.teacherPinHash) {
+    const pin = prompt("Enter the teacher PIN:");
+    if (pin === null) return;
+    if (pinHash(pin.trim()) !== state.teacherPinHash) return alert("Wrong PIN — ask your teacher.");
+  } else if (!state.classrooms.length) {
+    return go({ name: "onboarding" }); // nothing set up yet — run teacher setup
+  } else if (!confirm("No teacher PIN is set on this device yet. Open the teacher dashboard?")) {
+    return;
+  }
+  state.role = "teacher";
+  state.mode = "teacher";
+  save();
+  go({ name: "teacher-home" });
+}
+
+function lockTeacherMode() {
+  state.role = null;
+  save();
+  go({ name: "onboarding" });
+}
+
 /* ============================== shell ============================== */
 
 function headerHtml() {
   const m = state.mode;
+  const roleControls =
+    state.role === "teacher"
+      ? `<div class="mode-switch" role="tablist" aria-label="Mode">
+           <button id="mode-teacher" class="${m === "teacher" ? "active" : ""}">🍎 Teacher</button>
+           <button id="mode-student" class="${m === "student" ? "active" : ""}">🎒 Student view</button>
+         </div>
+         <button class="linkish" id="lock-btn" title="Lock the teacher dashboard on this device">🔒 Lock</button>`
+      : `<button class="linkish" id="teacher-access-btn" title="Open the teacher dashboard (PIN needed)">Teacher?</button>`;
   return `
     <header class="topbar">
       <button class="brand" id="brand-btn">
@@ -175,12 +235,9 @@ function headerHtml() {
         <span class="tag">unofficial remake</span>
       </button>
       <div class="spacer"></div>
-      <div class="mode-switch" role="tablist" aria-label="Mode">
-        <button id="mode-teacher" class="${m === "teacher" ? "active" : ""}">🍎 Teacher</button>
-        <button id="mode-student" class="${m === "student" ? "active" : ""}">🎒 Student</button>
-      </div>
+      ${roleControls}
       <a class="linkish" href="tracker.html" style="text-decoration:none;" title="Weekly XP from real Duolingo accounts">📈 XP tracker</a>
-      <button class="linkish" id="reset-btn" title="Reset all demo data">Reset demo</button>
+      <button class="linkish" id="reset-btn" title="Erase everything on this device and start over">Reset</button>
     </header>`;
 }
 
@@ -191,14 +248,17 @@ function footerHtml() {
 function shell(inner, { chrome = true } = {}) {
   $("#app").innerHTML = (chrome ? headerHtml() : "") + inner + (chrome ? footerHtml() : "");
   if (chrome) {
-    $("#brand-btn").addEventListener("click", () => setMode(state.mode));
-    $("#mode-teacher").addEventListener("click", () => setMode("teacher"));
-    $("#mode-student").addEventListener("click", () => setMode("student"));
-    $("#reset-btn").addEventListener("click", () => {
-      if (confirm("Reset all demo data? This clears every classroom, student, and progress record.")) {
-        state = seedState();
+    const bind = (sel, fn) => { const el = $(sel); if (el) el.addEventListener("click", fn); };
+    bind("#brand-btn", () => setMode(state.mode));
+    bind("#mode-teacher", () => setMode("teacher"));
+    bind("#mode-student", () => setMode("student"));
+    bind("#lock-btn", lockTeacherMode);
+    bind("#teacher-access-btn", requestTeacherAccess);
+    bind("#reset-btn", () => {
+      if (confirm("Reset the app? This erases every classroom, student, PIN, and progress record on this device.")) {
+        state = emptyState();
         save();
-        setMode("teacher");
+        go({ name: "onboarding" });
       }
     });
   }
@@ -206,6 +266,7 @@ function shell(inner, { chrome = true } = {}) {
 
 function render() {
   switch (route.name) {
+    case "onboarding": return renderOnboarding();
     case "teacher-home": return renderTeacherHome();
     case "classroom": return renderClassroom();
     case "student-pick": return renderStudentPick();
@@ -213,6 +274,157 @@ function render() {
     case "lesson": return renderLesson();
     default: return renderTeacherHome();
   }
+}
+
+/* ============================== start screen ============================== */
+
+function renderOnboarding() {
+  const hasClasses = state.classrooms.length > 0;
+  const hasPin = !!state.teacherPinHash;
+
+  const teacherCard = !hasClasses
+    ? `
+      <div class="card">
+        <h2 style="font-weight:900;margin-bottom:4px;">👩‍🏫 I'm a teacher</h2>
+        <p style="color:var(--ink-soft);font-weight:700;font-size:14px;margin-bottom:10px;">
+          Set up your classroom — you'll get a class code for your students,
+          and an optional PIN keeps them out of your dashboard.
+        </p>
+        <div class="form-row">
+          <input id="ob-class-name" placeholder="Classroom name (e.g. Spanish 1 — Period 3)" maxlength="40" style="flex:1;min-width:220px;" />
+        </div>
+        <div class="form-row">
+          <input id="ob-pin" placeholder="Teacher PIN (optional, 4+ digits)" maxlength="12" inputmode="numeric" />
+          <button class="btn small" id="ob-teacher-btn">Create my classroom</button>
+        </div>
+        <p id="ob-teacher-error" style="color:var(--red);font-weight:700;font-size:13px;"></p>
+      </div>`
+    : `
+      <div class="card">
+        <h2 style="font-weight:900;margin-bottom:4px;">👩‍🏫 I'm the teacher</h2>
+        <p style="color:var(--ink-soft);font-weight:700;font-size:14px;margin-bottom:10px;">
+          ${hasPin ? "Enter your PIN to open the teacher dashboard." : "Open the teacher dashboard. Tip: set a PIN from the dashboard so students can't get in."}
+        </p>
+        <div class="form-row">
+          ${hasPin ? `<input id="ob-unlock-pin" type="password" placeholder="Teacher PIN" maxlength="12" inputmode="numeric" />` : ""}
+          <button class="btn small" id="ob-unlock-btn">Open teacher dashboard</button>
+        </div>
+        <p id="ob-teacher-error" style="color:var(--red);font-weight:700;font-size:13px;"></p>
+      </div>`;
+
+  const profiles = state.classrooms
+    .flatMap((c) =>
+      c.studentIds
+        .map(getStudent)
+        .filter(Boolean)
+        .map(
+          (s) => `
+          <button class="picker-card" data-ob-pick="${s.id}">
+            <span class="avatar">${s.avatar}</span>
+            <span>${esc(s.name)}<span class="cls">${esc(c.name)}</span></span>
+          </button>`
+        )
+    )
+    .join("");
+
+  const studentCard = `
+    <div class="card">
+      <h2 style="font-weight:900;margin-bottom:4px;">🎒 I'm a student</h2>
+      ${profiles ? `<p style="color:var(--ink-soft);font-weight:700;font-size:14px;margin:6px 0;">Pick your profile:</p><div class="picker-list" style="margin-bottom:12px;">${profiles}</div><p style="color:var(--ink-soft);font-weight:700;font-size:14px;margin-bottom:6px;">…or join with a class code:</p>` : `<p style="color:var(--ink-soft);font-weight:700;font-size:14px;margin-bottom:10px;">Join with the class code your teacher gave you.</p>`}
+      <div class="form-row">
+        <input id="ob-code" placeholder="Class code" maxlength="6" style="text-transform:uppercase;width:130px;" />
+        <input id="ob-name" placeholder="Your name" maxlength="30" />
+        <button class="btn blue small" id="ob-join-btn">Join class</button>
+      </div>
+      <p id="ob-join-error" style="color:var(--red);font-weight:700;font-size:13px;"></p>
+    </div>`;
+
+  shell(
+    `
+    <main class="page" style="max-width:760px;">
+      <div style="text-align:center;margin:26px 0 26px;">
+        <div style="font-size:64px;">🦜</div>
+        <h1 style="font-size:30px;font-weight:900;color:var(--green);">Duolingo for Schools 2.0</h1>
+        <p style="color:var(--ink-soft);font-weight:700;">Unofficial remake · Who's here today?</p>
+      </div>
+      <div style="display:grid;gap:16px;">
+        ${teacherCard}
+        ${studentCard}
+        <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span style="font-size:30px;">📈</span>
+          <div style="flex:1;min-width:200px;">
+            <strong>Class XP Tracker</strong><br/>
+            <span style="color:var(--ink-soft);font-weight:700;font-size:13px;">Weekly XP from everyone's <em>real</em> Duolingo accounts — for your teacher.</span>
+          </div>
+          <a class="btn ghost small" href="tracker.html" style="text-decoration:none;">Open tracker</a>
+        </div>
+        ${!hasClasses ? `<p style="text-align:center;"><button class="linkish" id="ob-demo">Just exploring? Load the demo classroom →</button></p>` : ""}
+      </div>
+    </main>
+    <footer class="site">Unofficial educational remake for learning purposes — not affiliated with or endorsed by Duolingo, Inc.</footer>`,
+    { chrome: false }
+  );
+
+  const bind = (sel, fn) => { const el = $(sel); if (el) el.addEventListener("click", fn); };
+
+  bind("#ob-teacher-btn", () => {
+    const name = $("#ob-class-name").value.trim();
+    const pin = $("#ob-pin").value.trim();
+    const err = $("#ob-teacher-error");
+    if (!name) { err.textContent = "Please give your classroom a name."; return; }
+    if (pin && pin.length < 4) { err.textContent = "The PIN needs at least 4 characters (or leave it empty)."; return; }
+    state.classrooms.push({ id: uid(), name, code: classCode(), courseId: COURSE.id, studentIds: [], assignments: [] });
+    state.teacherPinHash = pin ? pinHash(pin) : null;
+    state.role = "teacher";
+    state.mode = "teacher";
+    save();
+    go({ name: "classroom", classroomId: state.classrooms[state.classrooms.length - 1].id, tab: "overview" });
+  });
+
+  bind("#ob-unlock-btn", () => {
+    const err = $("#ob-teacher-error");
+    if (hasPin) {
+      const pin = ($("#ob-unlock-pin").value || "").trim();
+      if (pinHash(pin) !== state.teacherPinHash) { err.textContent = "Wrong PIN."; return; }
+    }
+    state.role = "teacher";
+    state.mode = "teacher";
+    save();
+    go({ name: "teacher-home" });
+  });
+
+  bind("#ob-join-btn", () => {
+    const code = $("#ob-code").value.trim().toUpperCase();
+    const name = $("#ob-name").value.trim();
+    const err = $("#ob-join-error");
+    const c = state.classrooms.find((cl) => cl.code === code);
+    if (!c) { err.textContent = "No class found with that code — ask your teacher for it."; return; }
+    if (!name) { err.textContent = "Please enter your name."; return; }
+    const s = { id: uid(), name, avatar: pick(STUDENT_AVATARS), xp: 0, streak: 0, lastActive: null, skillLevels: {}, completedAssignments: [] };
+    state.students.push(s);
+    c.studentIds.push(s.id);
+    state.activeStudentId = s.id;
+    state.role = "student";
+    state.mode = "student";
+    save();
+    go({ name: "student-home" });
+  });
+
+  bind("#ob-demo", () => {
+    state = seedState();
+    save();
+    go({ name: "teacher-home" });
+  });
+
+  $$("[data-ob-pick]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.activeStudentId = el.dataset.obPick;
+      state.role = "student";
+      state.mode = "student";
+      save();
+      go({ name: "student-home" });
+    })
+  );
 }
 
 /* ============================== teacher views ============================== */
@@ -241,10 +453,28 @@ function renderTeacherHome() {
       <div class="page-head">
         <h1>My Classrooms</h1>
         <div class="spacer" style="flex:1"></div>
+        <button class="btn ghost small" id="pin-btn">🔑 ${state.teacherPinHash ? "Change PIN" : "Set PIN"}</button>
         <button class="btn blue small" id="new-class-btn">+ New classroom</button>
       </div>
+      ${!state.teacherPinHash ? `<p style="color:var(--ink-soft);font-weight:700;font-size:13px;margin:-8px 0 16px;">Tip: set a teacher PIN so students on this device can't open your dashboard.</p>` : ""}
       ${state.classrooms.length ? `<div class="grid">${cards}</div>` : `<div class="empty">No classrooms yet. Create one to get started!</div>`}
     </main>`);
+
+  $("#pin-btn").addEventListener("click", () => {
+    if (state.teacherPinHash) {
+      const cur = prompt("Current PIN:");
+      if (cur === null) return;
+      if (pinHash(cur.trim()) !== state.teacherPinHash) return alert("Wrong PIN.");
+    }
+    const next = prompt("New teacher PIN (4+ characters — leave empty to remove the PIN):");
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (trimmed && trimmed.length < 4) return alert("The PIN needs at least 4 characters.");
+    state.teacherPinHash = trimmed ? pinHash(trimmed) : null;
+    save();
+    alert(trimmed ? "PIN saved. Students now need it to open the teacher dashboard." : "PIN removed.");
+    go({ name: "teacher-home" });
+  });
 
   $("#new-class-btn").addEventListener("click", () => {
     const name = prompt("Classroom name (e.g. Spanish 2 — Period 5):");
@@ -486,7 +716,7 @@ function renderStudentPick() {
 
   shell(`
     <main class="page">
-      <div class="page-head"><h1>Who's learning today?</h1></div>
+      <div class="page-head"><h1>Who's learning today?</h1><div class="spacer" style="flex:1"></div><button class="linkish" id="back-start">← Start screen</button></div>
       ${cards ? `<div class="picker-list">${cards}</div>` : `<div class="empty">No students yet — join a class below.</div>`}
       <h2 class="section-title">Join a class</h2>
       <div class="card">
@@ -499,9 +729,13 @@ function renderStudentPick() {
       </div>
     </main>`);
 
+  const backBtn = $("#back-start");
+  if (backBtn) backBtn.addEventListener("click", () => go({ name: "onboarding" }));
+
   $$("[data-pick]").forEach((el) =>
     el.addEventListener("click", () => {
       state.activeStudentId = el.dataset.pick;
+      if (state.role !== "teacher") state.role = "student"; // teachers previewing keep their role
       save();
       go({ name: "student-home" });
     })
@@ -527,6 +761,7 @@ function renderStudentPick() {
     state.students.push(s);
     c.studentIds.push(s.id);
     state.activeStudentId = s.id;
+    if (state.role !== "teacher") state.role = "student";
     save();
     go({ name: "student-home" });
   });
@@ -967,4 +1202,6 @@ function renderLessonFailed() {
 
 /* ============================== boot ============================== */
 
-setMode(state.mode || "teacher");
+if (!state.role) go({ name: "onboarding" });
+else if (state.role === "student") setMode("student");
+else setMode(state.mode || "teacher");
