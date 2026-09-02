@@ -1,0 +1,969 @@
+/*
+ * Duolingo for Schools 2.0 — unofficial educational remake.
+ * Vanilla JS single-page app: teacher dashboard + student lesson player.
+ * State persists in localStorage. No build step, no dependencies.
+ */
+"use strict";
+
+/* ============================== helpers ============================== */
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+const esc = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const uid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+
+const isoDate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const todayStr = () => isoDate(new Date());
+const daysFromNow = (n) => isoDate(new Date(Date.now() + n * 86400000));
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const sample = (arr, n) => shuffle(arr).slice(0, n);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+const normalize = (s) =>
+  String(s)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const skillById = (id) => COURSE.skills.find((s) => s.id === id);
+
+function classCode() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function relativeDay(dateStr) {
+  if (!dateStr) return "never";
+  const diff = Math.round((new Date(todayStr()) - new Date(dateStr)) / 86400000);
+  if (diff <= 0) return "today";
+  if (diff === 1) return "yesterday";
+  return `${diff} days ago`;
+}
+
+function dueLabel(dateStr) {
+  const diff = Math.round((new Date(dateStr) - new Date(todayStr())) / 86400000);
+  if (diff < 0) return { text: `overdue by ${-diff} day${diff === -1 ? "" : "s"}`, late: true };
+  if (diff === 0) return { text: "due today", late: false };
+  if (diff === 1) return { text: "due tomorrow", late: false };
+  return { text: `due in ${diff} days`, late: false };
+}
+
+/* ============================== state ============================== */
+
+const STORAGE_KEY = "dfs2-state-v1";
+
+function seedState() {
+  const mk = (name, avatar, xp, streak, lastActiveDaysAgo, levels, done) => ({
+    id: uid(),
+    name,
+    avatar,
+    xp,
+    streak,
+    lastActive: lastActiveDaysAgo === null ? null : daysFromNow(-lastActiveDaysAgo),
+    skillLevels: levels,
+    completedAssignments: done
+  });
+
+  const a1 = { id: uid(), skillId: "greetings", due: daysFromNow(2), createdAt: todayStr() };
+  const a2 = { id: uid(), skillId: "basics", due: daysFromNow(6), createdAt: todayStr() };
+
+  const students = [
+    mk("Ana", "🦊", 320, 6, 0, { basics: 3, greetings: 2, food: 1 }, [a1.id, a2.id]),
+    mk("Ben", "🐼", 150, 2, 1, { basics: 2, greetings: 1 }, [a2.id]),
+    mk("Carlos", "🐯", 85, 0, 3, { basics: 1 }, []),
+    mk("Diya", "🐨", 240, 4, 0, { basics: 3, greetings: 1, food: 1 }, [a2.id]),
+    mk("Emma", "🐸", 40, 1, 1, { basics: 1 }, []),
+    mk("Farid", "🦁", 0, 0, null, {}, [])
+  ];
+
+  const classroom = {
+    id: uid(),
+    name: "Spanish 1 — Period 3",
+    code: classCode(),
+    courseId: COURSE.id,
+    studentIds: students.map((s) => s.id),
+    assignments: [a1, a2]
+  };
+
+  return {
+    mode: "teacher",
+    activeStudentId: null,
+    classrooms: [classroom],
+    students
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.classrooms) && Array.isArray(parsed.students)) return parsed;
+    }
+  } catch (e) {
+    /* corrupted or unavailable storage — fall through to a fresh seed */
+  }
+  return seedState();
+}
+
+let state = loadState();
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    /* storage may be unavailable (private mode) — app still works in-memory */
+  }
+}
+
+const getStudent = (id) => state.students.find((s) => s.id === id);
+const getClassroom = (id) => state.classrooms.find((c) => c.id === id);
+const classroomsOf = (studentId) => state.classrooms.filter((c) => c.studentIds.includes(studentId));
+const crownsOf = (student) => Object.values(student.skillLevels).reduce((a, b) => a + b, 0);
+
+/* ============================== routing ============================== */
+
+let route = { name: "teacher-home" };
+let session = null; // active lesson session (not persisted)
+
+function go(r) {
+  route = r;
+  render();
+  window.scrollTo(0, 0);
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  save();
+  if (mode === "teacher") go({ name: "teacher-home" });
+  else if (state.activeStudentId && getStudent(state.activeStudentId)) go({ name: "student-home" });
+  else go({ name: "student-pick" });
+}
+
+/* ============================== shell ============================== */
+
+function headerHtml() {
+  const m = state.mode;
+  return `
+    <header class="topbar">
+      <button class="brand" id="brand-btn">
+        <span class="mascot">🦜</span>
+        <span>Duolingo for Schools 2.0</span>
+        <span class="tag">unofficial remake</span>
+      </button>
+      <div class="spacer"></div>
+      <div class="mode-switch" role="tablist" aria-label="Mode">
+        <button id="mode-teacher" class="${m === "teacher" ? "active" : ""}">🍎 Teacher</button>
+        <button id="mode-student" class="${m === "student" ? "active" : ""}">🎒 Student</button>
+      </div>
+      <button class="linkish" id="reset-btn" title="Reset all demo data">Reset demo</button>
+    </header>`;
+}
+
+function footerHtml() {
+  return `<footer class="site">Unofficial educational remake for learning purposes — not affiliated with or endorsed by Duolingo, Inc.</footer>`;
+}
+
+function shell(inner, { chrome = true } = {}) {
+  $("#app").innerHTML = (chrome ? headerHtml() : "") + inner + (chrome ? footerHtml() : "");
+  if (chrome) {
+    $("#brand-btn").addEventListener("click", () => setMode(state.mode));
+    $("#mode-teacher").addEventListener("click", () => setMode("teacher"));
+    $("#mode-student").addEventListener("click", () => setMode("student"));
+    $("#reset-btn").addEventListener("click", () => {
+      if (confirm("Reset all demo data? This clears every classroom, student, and progress record.")) {
+        state = seedState();
+        save();
+        setMode("teacher");
+      }
+    });
+  }
+}
+
+function render() {
+  switch (route.name) {
+    case "teacher-home": return renderTeacherHome();
+    case "classroom": return renderClassroom();
+    case "student-pick": return renderStudentPick();
+    case "student-home": return renderStudentHome();
+    case "lesson": return renderLesson();
+    default: return renderTeacherHome();
+  }
+}
+
+/* ============================== teacher views ============================== */
+
+function renderTeacherHome() {
+  const cards = state.classrooms
+    .map((c) => {
+      const done = c.assignments.length
+        ? c.assignments.reduce((acc, a) => acc + c.studentIds.filter((sid) => getStudent(sid)?.completedAssignments.includes(a.id)).length, 0)
+        : 0;
+      const totalSlots = c.assignments.length * c.studentIds.length;
+      return `
+        <button class="card clickable" data-classroom="${c.id}">
+          <h2 style="font-size:19px;font-weight:900;margin-bottom:6px;">🏫 ${esc(c.name)}</h2>
+          <p style="color:var(--ink-soft);font-weight:700;font-size:14px;">
+            ${COURSE.flag} ${COURSE.title} · ${c.studentIds.length} student${c.studentIds.length === 1 ? "" : "s"}<br/>
+            ${c.assignments.length} assignment${c.assignments.length === 1 ? "" : "s"}${totalSlots ? ` · ${done}/${totalSlots} turned in` : ""}
+          </p>
+          <p style="margin-top:10px;font-weight:800;font-size:13px;color:var(--blue);">Class code: ${esc(c.code)}</p>
+        </button>`;
+    })
+    .join("");
+
+  shell(`
+    <main class="page">
+      <div class="page-head">
+        <h1>My Classrooms</h1>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn blue small" id="new-class-btn">+ New classroom</button>
+      </div>
+      ${state.classrooms.length ? `<div class="grid">${cards}</div>` : `<div class="empty">No classrooms yet. Create one to get started!</div>`}
+    </main>`);
+
+  $("#new-class-btn").addEventListener("click", () => {
+    const name = prompt("Classroom name (e.g. Spanish 2 — Period 5):");
+    if (!name || !name.trim()) return;
+    const c = { id: uid(), name: name.trim(), code: classCode(), courseId: COURSE.id, studentIds: [], assignments: [] };
+    state.classrooms.push(c);
+    save();
+    go({ name: "classroom", classroomId: c.id, tab: "overview" });
+  });
+
+  $$("[data-classroom]").forEach((el) =>
+    el.addEventListener("click", () => go({ name: "classroom", classroomId: el.dataset.classroom, tab: "overview" }))
+  );
+}
+
+function renderClassroom() {
+  const c = getClassroom(route.classroomId);
+  if (!c) return go({ name: "teacher-home" });
+  const tab = route.tab || "overview";
+  const students = c.studentIds.map(getStudent).filter(Boolean);
+
+  const tabs = ["overview", "students", "assignments", "progress"]
+    .map((t) => `<button data-tab="${t}" class="${t === tab ? "active" : ""}">${t}</button>`)
+    .join("");
+
+  let body = "";
+  if (tab === "overview") body = overviewTab(c, students);
+  if (tab === "students") body = studentsTab(c, students);
+  if (tab === "assignments") body = assignmentsTab(c, students);
+  if (tab === "progress") body = progressTab(c, students);
+
+  shell(`
+    <main class="page">
+      <div class="page-head">
+        <button class="linkish" id="back-btn">← Classrooms</button>
+        <h1>🏫 ${esc(c.name)}</h1>
+        <span class="sub">${COURSE.flag} ${COURSE.title} course · Class code <strong>${esc(c.code)}</strong></span>
+      </div>
+      <div class="tabs">${tabs}</div>
+      ${body}
+    </main>`);
+
+  $("#back-btn").addEventListener("click", () => go({ name: "teacher-home" }));
+  $$("[data-tab]").forEach((el) =>
+    el.addEventListener("click", () => go({ name: "classroom", classroomId: c.id, tab: el.dataset.tab }))
+  );
+  bindClassroomTab(c, students, tab);
+}
+
+function overviewTab(c, students) {
+  const totalXp = students.reduce((a, s) => a + s.xp, 0);
+  const avgCrowns = students.length ? (students.reduce((a, s) => a + crownsOf(s), 0) / students.length).toFixed(1) : "0";
+  const activeToday = students.filter((s) => s.lastActive === todayStr()).length;
+  return `
+    <div class="stat-row">
+      <div class="stat"><div class="num">${students.length}</div><div class="lbl">Students</div></div>
+      <div class="stat"><div class="num">${totalXp}</div><div class="lbl">Total XP</div></div>
+      <div class="stat"><div class="num">${c.assignments.length}</div><div class="lbl">Assignments</div></div>
+      <div class="stat"><div class="num">${avgCrowns}</div><div class="lbl">Avg crowns</div></div>
+      <div class="stat"><div class="num">${activeToday}</div><div class="lbl">Active today</div></div>
+    </div>
+    <div class="card">
+      <h3 style="font-weight:900;margin-bottom:8px;">Invite students</h3>
+      <p style="color:var(--ink-soft);font-weight:700;font-size:14px;margin-bottom:12px;">
+        Students open the app, switch to <strong>Student</strong> mode, and join with this class code:
+      </p>
+      <span class="code-box">${esc(c.code)}</span>
+    </div>`;
+}
+
+function studentsTab(c, students) {
+  const rows = students
+    .map(
+      (s) => `
+      <tr>
+        <td>${s.avatar} <strong>${esc(s.name)}</strong></td>
+        <td>⚡ ${s.xp} XP</td>
+        <td>🔥 ${s.streak}</td>
+        <td>👑 ${crownsOf(s)}</td>
+        <td class="${s.lastActive === todayStr() ? "cell-good" : "cell-warn"}">${relativeDay(s.lastActive)}</td>
+        <td><button class="linkish" data-remove="${s.id}">Remove</button></td>
+      </tr>`
+    )
+    .join("");
+
+  return `
+    <div class="form-row">
+      <input id="new-student-name" placeholder="Student name" maxlength="30" />
+      <button class="btn blue small" id="add-student-btn">+ Add student</button>
+    </div>
+    ${
+      students.length
+        ? `<div class="table-wrap"><table>
+            <thead><tr><th>Student</th><th>XP</th><th>Streak</th><th>Crowns</th><th>Last active</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>`
+        : `<div class="empty">No students yet — add one above or share the class code.</div>`
+    }`;
+}
+
+function assignmentsTab(c, students) {
+  const skillOptions = COURSE.skills.map((s) => `<option value="${s.id}">${s.icon} ${esc(s.title)}</option>`).join("");
+  const list = c.assignments
+    .map((a) => {
+      const skill = skillById(a.skillId);
+      const doneIds = c.studentIds.filter((sid) => getStudent(sid)?.completedAssignments.includes(a.id));
+      const due = dueLabel(a.due);
+      const chips = students
+        .map((s) =>
+          s.completedAssignments.includes(a.id)
+            ? `<span class="chip done">${s.avatar} ${esc(s.name)} ✓</span>`
+            : `<span class="chip pending">${s.avatar} ${esc(s.name)}</span>`
+        )
+        .join("");
+      return `
+        <div class="card" style="margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:26px;">${skill ? skill.icon : "📘"}</span>
+            <div style="flex:1;">
+              <strong style="font-size:16px;">Complete a lesson: ${skill ? esc(skill.title) : esc(a.skillId)}</strong><br/>
+              <span style="font-size:13px;font-weight:700;color:${due.late ? "var(--red)" : "var(--ink-soft)"};">
+                ${due.text} (${a.due}) · ${doneIds.length}/${c.studentIds.length} turned in
+              </span>
+            </div>
+            <button class="linkish" data-del-assignment="${a.id}">Delete</button>
+          </div>
+          <div style="margin-top:10px;">${chips || '<span style="color:var(--ink-soft);font-weight:700;font-size:13px;">No students in this class yet.</span>'}</div>
+        </div>`;
+    })
+    .join("");
+
+  return `
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="font-weight:900;margin-bottom:4px;">New assignment</h3>
+      <div class="form-row">
+        <select id="assign-skill">${skillOptions}</select>
+        <input id="assign-due" type="date" value="${daysFromNow(7)}" min="${todayStr()}" />
+        <button class="btn small" id="assign-btn">Assign</button>
+      </div>
+    </div>
+    ${list || `<div class="empty">No assignments yet. Create one above!</div>`}`;
+}
+
+function progressTab(c, students) {
+  if (!students.length) return `<div class="empty">Add students to see their progress here.</div>`;
+  const head = COURSE.skills.map((s) => `<th title="${esc(s.title)}">${s.icon}<br/>${esc(s.title)}</th>`).join("");
+  const rows = students
+    .map((s) => {
+      const cells = COURSE.skills
+        .map((sk) => {
+          const lvl = s.skillLevels[sk.id] || 0;
+          return `<td class="${lvl ? "cell-good" : "cell-warn"}">${lvl ? "👑".repeat(Math.min(lvl, 3)) : "—"}</td>`;
+        })
+        .join("");
+      return `<tr><td>${s.avatar} <strong>${esc(s.name)}</strong></td>${cells}</tr>`;
+    })
+    .join("");
+  return `
+    <p style="color:var(--ink-soft);font-weight:700;font-size:13px;margin-bottom:10px;">
+      Each 👑 is one completed lesson level in a skill (max 3).
+    </p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th>${head}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function bindClassroomTab(c, students, tab) {
+  if (tab === "students") {
+    $("#add-student-btn").addEventListener("click", () => {
+      const input = $("#new-student-name");
+      const name = input.value.trim();
+      if (!name) return input.focus();
+      const s = {
+        id: uid(),
+        name,
+        avatar: pick(STUDENT_AVATARS),
+        xp: 0,
+        streak: 0,
+        lastActive: null,
+        skillLevels: {},
+        completedAssignments: []
+      };
+      state.students.push(s);
+      c.studentIds.push(s.id);
+      save();
+      go({ name: "classroom", classroomId: c.id, tab: "students" });
+    });
+    $$("[data-remove]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const s = getStudent(el.dataset.remove);
+        if (!s || !confirm(`Remove ${s.name} from this classroom?`)) return;
+        c.studentIds = c.studentIds.filter((id) => id !== s.id);
+        if (!classroomsOf(s.id).length) {
+          state.students = state.students.filter((st) => st.id !== s.id);
+          if (state.activeStudentId === s.id) state.activeStudentId = null;
+        }
+        save();
+        go({ name: "classroom", classroomId: c.id, tab: "students" });
+      })
+    );
+  }
+  if (tab === "assignments") {
+    $("#assign-btn").addEventListener("click", () => {
+      const skillId = $("#assign-skill").value;
+      const due = $("#assign-due").value || daysFromNow(7);
+      c.assignments.push({ id: uid(), skillId, due, createdAt: todayStr() });
+      save();
+      go({ name: "classroom", classroomId: c.id, tab: "assignments" });
+    });
+    $$("[data-del-assignment]").forEach((el) =>
+      el.addEventListener("click", () => {
+        if (!confirm("Delete this assignment?")) return;
+        c.assignments = c.assignments.filter((a) => a.id !== el.dataset.delAssignment);
+        save();
+        go({ name: "classroom", classroomId: c.id, tab: "assignments" });
+      })
+    );
+  }
+}
+
+/* ============================== student views ============================== */
+
+function renderStudentPick() {
+  const cards = state.classrooms
+    .flatMap((c) =>
+      c.studentIds
+        .map(getStudent)
+        .filter(Boolean)
+        .map(
+          (s) => `
+          <button class="picker-card" data-pick="${s.id}">
+            <span class="avatar">${s.avatar}</span>
+            <span>${esc(s.name)}<span class="cls">${esc(c.name)}</span></span>
+          </button>`
+        )
+    )
+    .join("");
+
+  shell(`
+    <main class="page">
+      <div class="page-head"><h1>Who's learning today?</h1></div>
+      ${cards ? `<div class="picker-list">${cards}</div>` : `<div class="empty">No students yet — join a class below.</div>`}
+      <h2 class="section-title">Join a class</h2>
+      <div class="card">
+        <div class="form-row">
+          <input id="join-code" placeholder="Class code (e.g. ABC123)" maxlength="6" style="text-transform:uppercase;" />
+          <input id="join-name" placeholder="Your name" maxlength="30" />
+          <button class="btn small" id="join-btn">Join class</button>
+        </div>
+        <p id="join-error" style="color:var(--red);font-weight:700;font-size:13px;"></p>
+      </div>
+    </main>`);
+
+  $$("[data-pick]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.activeStudentId = el.dataset.pick;
+      save();
+      go({ name: "student-home" });
+    })
+  );
+
+  $("#join-btn").addEventListener("click", () => {
+    const code = $("#join-code").value.trim().toUpperCase();
+    const name = $("#join-name").value.trim();
+    const err = $("#join-error");
+    const c = state.classrooms.find((cl) => cl.code === code);
+    if (!c) { err.textContent = "No class found with that code."; return; }
+    if (!name) { err.textContent = "Please enter your name."; return; }
+    const s = {
+      id: uid(),
+      name,
+      avatar: pick(STUDENT_AVATARS),
+      xp: 0,
+      streak: 0,
+      lastActive: null,
+      skillLevels: {},
+      completedAssignments: []
+    };
+    state.students.push(s);
+    c.studentIds.push(s.id);
+    state.activeStudentId = s.id;
+    save();
+    go({ name: "student-home" });
+  });
+}
+
+function renderStudentHome() {
+  const s = getStudent(state.activeStudentId);
+  if (!s) return go({ name: "student-pick" });
+  const myClasses = classroomsOf(s.id);
+
+  const pendingAssignments = myClasses.flatMap((c) =>
+    c.assignments
+      .filter((a) => !s.completedAssignments.includes(a.id))
+      .map((a) => ({ ...a, className: c.name }))
+  );
+
+  const assignmentCards = pendingAssignments
+    .map((a) => {
+      const skill = skillById(a.skillId);
+      const due = dueLabel(a.due);
+      return `
+        <div class="assignment-card ${due.late ? "overdue" : ""}">
+          <span class="icon">${skill ? skill.icon : "📘"}</span>
+          <div class="meta">
+            <strong>Complete a lesson: ${skill ? esc(skill.title) : esc(a.skillId)}</strong><br/>
+            <span class="due ${due.late ? "late" : ""}">${due.text} · ${esc(a.className)}</span>
+          </div>
+          <button class="btn small" data-start-assignment="${a.id}" data-skill="${a.skillId}">Start</button>
+        </div>`;
+    })
+    .join("");
+
+  const tree = COURSE.skills
+    .map((sk) => {
+      const lvl = s.skillLevels[sk.id] || 0;
+      const cls = lvl >= 3 ? "maxed" : lvl > 0 ? "started" : "";
+      return `
+        <button class="skill-node ${cls}" data-start-skill="${sk.id}">
+          <span class="bubble">${sk.icon}</span>
+          <span class="name">${esc(sk.title)}</span>
+          <span class="crowns">${lvl ? "👑".repeat(Math.min(lvl, 3)) : "Start"}</span>
+        </button>`;
+    })
+    .join("");
+
+  shell(`
+    <main class="page">
+      <div class="hud">
+        <span style="font-size:38px;">${s.avatar}</span>
+        <div>
+          <div style="font-weight:900;font-size:20px;">${esc(s.name)}</div>
+          <div style="color:var(--ink-soft);font-weight:700;font-size:13px;">${myClasses.map((c) => esc(c.name)).join(" · ") || "No class yet"}</div>
+        </div>
+        <div class="spacer" style="flex:1"></div>
+        <span class="pill" title="Total XP">⚡ ${s.xp} XP</span>
+        <span class="pill" title="Day streak">🔥 ${s.streak}</span>
+        <span class="pill" title="Crowns">👑 ${crownsOf(s)}</span>
+        <button class="linkish" id="switch-student">Switch</button>
+      </div>
+
+      <h2 class="section-title">📌 Assignments from your teacher</h2>
+      ${assignmentCards || `<div class="empty">🎉 Nothing due — you're all caught up!</div>`}
+
+      <h2 class="section-title">${COURSE.flag} ${COURSE.title} — Skill tree</h2>
+      <div class="skill-tree">${tree}</div>
+    </main>`);
+
+  $("#switch-student").addEventListener("click", () => {
+    state.activeStudentId = null;
+    save();
+    go({ name: "student-pick" });
+  });
+  $$("[data-start-assignment]").forEach((el) =>
+    el.addEventListener("click", () => startLesson(el.dataset.skill, el.dataset.startAssignment))
+  );
+  $$("[data-start-skill]").forEach((el) =>
+    el.addEventListener("click", () => startLesson(el.dataset.startSkill, null))
+  );
+}
+
+/* ============================== lesson engine ============================== */
+
+function generateLesson(skill, count = 8) {
+  const exercises = [];
+  const words = shuffle(skill.words);
+  const sentences = shuffle(skill.sentences);
+  const allWords = COURSE.skills.flatMap((s) => s.words);
+
+  // 1 match + up to 2 word-bank sentences + choice/type for the rest
+  exercises.push(makeMatch(skill));
+  sentences.slice(0, 2).forEach((sen) => exercises.push(makeBank(sen, allWords)));
+
+  let wi = 0;
+  const kinds = ["choice", "reverse-choice", "type"];
+  while (exercises.length < count) {
+    const w = words[wi % words.length];
+    wi++;
+    const kind = kinds[exercises.length % kinds.length];
+    if (kind === "choice") exercises.push(makeChoice(w, skill, "es-en"));
+    else if (kind === "reverse-choice") exercises.push(makeChoice(w, skill, "en-es"));
+    else exercises.push(makeType(w));
+  }
+  return shuffle(exercises);
+}
+
+function makeChoice(word, skill, dir) {
+  const isEsEn = dir === "es-en";
+  const answer = isEsEn ? word.en : word.es;
+  const distractors = sample(
+    skill.words.filter((w) => w !== word).map((w) => (isEsEn ? w.en : w.es)),
+    3
+  );
+  return {
+    kind: "choice",
+    label: isEsEn ? 'Select the meaning of the Spanish word' : "Select the Spanish translation",
+    prompt: isEsEn ? word.es : word.en,
+    options: shuffle([answer, ...distractors]),
+    answer
+  };
+}
+
+function makeType(word) {
+  return {
+    kind: "type",
+    label: "Type the English translation",
+    prompt: word.es,
+    answer: word.en
+  };
+}
+
+function makeBank(sentence, allWords) {
+  const tokens = sentence.en.replace(/[.,!?—]/g, "").split(/\s+/).filter(Boolean);
+  const distractorPool = allWords
+    .flatMap((w) => w.en.replace(/[.,!?—]/g, "").split(/\s+/))
+    .filter((t) => !tokens.some((tok) => normalize(tok) === normalize(t)));
+  const bank = shuffle(tokens.concat(sample(Array.from(new Set(distractorPool)), 3)));
+  return {
+    kind: "bank",
+    label: "Translate this sentence",
+    prompt: sentence.es,
+    bank,
+    answer: tokens.join(" ")
+  };
+}
+
+function makeMatch(skill) {
+  const pairs = sample(skill.words, 4);
+  return {
+    kind: "match",
+    label: "Tap the matching pairs",
+    pairs,
+    left: shuffle(pairs.map((p) => p.es)),
+    right: shuffle(pairs.map((p) => p.en))
+  };
+}
+
+function startLesson(skillId, assignmentId) {
+  const skill = skillById(skillId);
+  if (!skill) return;
+  const queue = generateLesson(skill);
+  session = {
+    skillId,
+    assignmentId,
+    queue,
+    total: queue.length,
+    correct: 0,
+    mistakes: 0,
+    hearts: 3,
+    finished: false,
+    failed: false,
+    rewarded: false
+  };
+  go({ name: "lesson" });
+}
+
+function renderLesson() {
+  if (!session) return go({ name: "student-home" });
+  if (session.failed) return renderLessonFailed();
+  if (!session.queue.length) return renderLessonComplete();
+
+  const ex = session.queue[0];
+  const pct = Math.round((session.correct / session.total) * 100);
+
+  let body = "";
+  if (ex.kind === "choice") {
+    body = `<div class="options">${ex.options
+      .map((o, i) => `<button class="option" data-opt="${i}">${esc(o)}</button>`)
+      .join("")}</div>`;
+  } else if (ex.kind === "type") {
+    body = `<input class="type-input" id="type-answer" autocomplete="off" placeholder="Type in English…" />`;
+  } else if (ex.kind === "bank") {
+    body = `
+      <div class="bank-answer" id="bank-answer"></div>
+      <div class="bank-pool">${ex.bank.map((t, i) => `<button class="token" data-tok="${i}">${esc(t)}</button>`).join("")}</div>`;
+  } else if (ex.kind === "match") {
+    body = `
+      <div class="match-grid">
+        ${ex.left.map((t, i) => `<button class="match-btn" data-side="l" data-val="${esc(t)}" data-i="${i}">${esc(t)}</button>`).join("")}
+        ${ex.right.map((t, i) => `<button class="match-btn" data-side="r" data-val="${esc(t)}" data-i="${i}">${esc(t)}</button>`).join("")}
+      </div>`;
+  }
+
+  shell(
+    `
+    <div class="lesson-top">
+      <button class="quit" id="quit-btn" title="Quit lesson">✕</button>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <span class="hearts">${"❤️".repeat(session.hearts)}${"🖤".repeat(3 - session.hearts)}</span>
+    </div>
+    <main class="lesson-body">
+      <div class="exercise-kind">${esc(ex.label)}</div>
+      ${ex.kind !== "match" ? `<div class="prompt"><span class="speak">🔊</span>${esc(ex.prompt)}</div>` : ""}
+      ${body}
+    </main>
+    <div class="lesson-footer" id="lesson-footer">
+      <div class="inner">
+        <div class="msg" id="footer-msg"></div>
+        <button class="btn" id="check-btn" ${ex.kind === "match" ? "style='visibility:hidden'" : "disabled"}>Check</button>
+      </div>
+    </div>`,
+    { chrome: false }
+  );
+
+  $("#quit-btn").addEventListener("click", () => {
+    if (confirm("Quit this lesson? Progress in it will be lost.")) {
+      session = null;
+      go({ name: "student-home" });
+    }
+  });
+
+  bindExercise(ex);
+}
+
+function bindExercise(ex) {
+  const checkBtn = $("#check-btn");
+
+  if (ex.kind === "choice") {
+    let selected = null;
+    $$("[data-opt]").forEach((el) =>
+      el.addEventListener("click", () => {
+        $$("[data-opt]").forEach((o) => o.classList.remove("selected"));
+        el.classList.add("selected");
+        selected = ex.options[Number(el.dataset.opt)];
+        checkBtn.disabled = false;
+      })
+    );
+    checkBtn.addEventListener("click", () => {
+      const ok = selected === ex.answer;
+      $$("[data-opt]").forEach((o) => {
+        o.disabled = true;
+        const val = ex.options[Number(o.dataset.opt)];
+        if (val === ex.answer) o.classList.add("correct");
+        else if (o.classList.contains("selected") && !ok) o.classList.add("wrong");
+      });
+      gradeAnswer(ok, ex.answer);
+    });
+  }
+
+  if (ex.kind === "type") {
+    const input = $("#type-answer");
+    input.focus();
+    input.addEventListener("input", () => (checkBtn.disabled = !input.value.trim()));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !checkBtn.disabled && !checkBtn.dataset.done) checkBtn.click();
+    });
+    checkBtn.addEventListener("click", () => {
+      checkBtn.dataset.done = "1";
+      input.disabled = true;
+      gradeAnswer(normalize(input.value) === normalize(ex.answer), ex.answer);
+    });
+  }
+
+  if (ex.kind === "bank") {
+    const chosen = []; // indices into ex.bank, in order
+    const answerBox = $("#bank-answer");
+    const redraw = () => {
+      answerBox.innerHTML = chosen
+        .map((i, pos) => `<button class="token" data-chosen="${pos}">${esc(ex.bank[i])}</button>`)
+        .join("");
+      $$("[data-tok]").forEach((el) => el.classList.toggle("used", chosen.includes(Number(el.dataset.tok))));
+      $$("[data-chosen]").forEach((el) =>
+        el.addEventListener("click", () => {
+          chosen.splice(Number(el.dataset.chosen), 1);
+          redraw();
+        })
+      );
+      checkBtn.disabled = chosen.length === 0;
+    };
+    $$("[data-tok]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const i = Number(el.dataset.tok);
+        if (!chosen.includes(i)) {
+          chosen.push(i);
+          redraw();
+        }
+      })
+    );
+    checkBtn.addEventListener("click", () => {
+      const built = chosen.map((i) => ex.bank[i]).join(" ");
+      $$("#bank-answer .token, .bank-pool .token").forEach((el) => (el.disabled = true));
+      gradeAnswer(normalize(built) === normalize(ex.answer), ex.answer);
+    });
+  }
+
+  if (ex.kind === "match") {
+    let selectedLeft = null;
+    let matched = 0;
+    const pairOf = (es) => ex.pairs.find((p) => p.es === es);
+    $$(".match-btn").forEach((el) =>
+      el.addEventListener("click", () => {
+        const side = el.dataset.side;
+        if (side === "l") {
+          $$('.match-btn[data-side="l"]').forEach((b) => b.classList.remove("selected"));
+          el.classList.add("selected");
+          selectedLeft = el;
+        } else if (selectedLeft) {
+          const pair = pairOf(selectedLeft.dataset.val);
+          if (pair && pair.en === el.dataset.val) {
+            selectedLeft.classList.remove("selected");
+            selectedLeft.classList.add("matched");
+            el.classList.add("matched");
+            selectedLeft = null;
+            matched++;
+            if (matched === ex.pairs.length) gradeAnswer(true, null);
+          } else {
+            el.classList.add("shake");
+            setTimeout(() => el.classList.remove("shake"), 350);
+            session.mistakes++;
+          }
+        }
+      })
+    );
+  }
+}
+
+function gradeAnswer(ok, correctAnswer) {
+  const footer = $("#lesson-footer");
+  const msg = $("#footer-msg");
+  const checkBtn = $("#check-btn");
+
+  if (ok) {
+    session.correct++;
+    session.queue.shift();
+    footer.classList.add("good");
+    msg.innerHTML = `<div class="headline">${pick(["Nicely done!", "Excellent!", "Correct!", "Great job!"])}</div>`;
+  } else {
+    session.mistakes++;
+    session.hearts--;
+    footer.classList.add("bad");
+    msg.innerHTML = `<div class="headline">Incorrect</div><div class="detail">Correct answer: ${esc(correctAnswer)}</div>`;
+    // Requeue the missed exercise so it must be answered correctly to finish.
+    const missed = session.queue.shift();
+    if (session.hearts > 0) session.queue.push(missed);
+    else session.failed = true;
+  }
+
+  checkBtn.style.visibility = "visible";
+  checkBtn.disabled = false;
+  checkBtn.textContent = "Continue";
+  const fresh = checkBtn.cloneNode(true); // drop old listeners
+  checkBtn.replaceWith(fresh);
+  fresh.addEventListener("click", () => renderLesson());
+  fresh.focus();
+}
+
+function applyRewards() {
+  if (session.rewarded) return;
+  session.rewarded = true;
+
+  const s = getStudent(state.activeStudentId);
+  if (!s) return;
+
+  session.xpEarned = 10 + (session.mistakes === 0 ? 5 : 0);
+  s.xp += session.xpEarned;
+  s.skillLevels[session.skillId] = Math.min(3, (s.skillLevels[session.skillId] || 0) + 1);
+
+  const today = todayStr();
+  if (s.lastActive !== today) {
+    const yesterday = daysFromNow(-1);
+    s.streak = s.lastActive === yesterday ? s.streak + 1 : 1;
+    s.lastActive = today;
+  }
+
+  // Any assignment in this student's classrooms for this skill counts as turned in.
+  classroomsOf(s.id).forEach((c) =>
+    c.assignments.forEach((a) => {
+      if (a.skillId === session.skillId && !s.completedAssignments.includes(a.id)) {
+        s.completedAssignments.push(a.id);
+      }
+    })
+  );
+  save();
+}
+
+function renderLessonComplete() {
+  applyRewards();
+  const skill = skillById(session.skillId);
+  const perfect = session.mistakes === 0;
+  shell(
+    `
+    <div class="finish">
+      <div class="big">${perfect ? "🏆" : "🎉"}</div>
+      <h1>Lesson complete!</h1>
+      <p>${skill ? esc(skill.title) : ""} · ${perfect ? "Perfect lesson — no mistakes!" : "Nice work, keep practicing!"}</p>
+      <div class="stat-row">
+        <div class="stat"><div class="num">⚡ ${session.xpEarned || 0}</div><div class="lbl">XP earned</div></div>
+        <div class="stat"><div class="num">🎯 ${Math.round((session.total / (session.total + session.mistakes)) * 100)}%</div><div class="lbl">Accuracy</div></div>
+      </div>
+      <button class="btn" id="continue-btn">Continue</button>
+    </div>`,
+    { chrome: false }
+  );
+  $("#continue-btn").addEventListener("click", () => {
+    session = null;
+    go({ name: "student-home" });
+  });
+}
+
+function renderLessonFailed() {
+  shell(
+    `
+    <div class="finish">
+      <div class="big">💔</div>
+      <h1>You ran out of hearts!</h1>
+      <p>Don't worry — mistakes are how we learn. Try the lesson again.</p>
+      <button class="btn red" id="retry-btn">Try again</button>
+      &nbsp;
+      <button class="btn ghost" id="home-btn">Back home</button>
+    </div>`,
+    { chrome: false }
+  );
+  $("#retry-btn").addEventListener("click", () => startLesson(session.skillId, session.assignmentId));
+  $("#home-btn").addEventListener("click", () => {
+    session = null;
+    go({ name: "student-home" });
+  });
+}
+
+/* ============================== boot ============================== */
+
+setMode(state.mode || "teacher");
