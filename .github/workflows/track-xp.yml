@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: tracker-writes
+
 jobs:
   track:
     runs-on: ubuntu-latest

@@ -46,14 +46,27 @@ teacher can keep seeing how much XP each student earns per week on the *real* Du
 - [tracker.html](tracker.html) turns those snapshots into a weekly leaderboard: XP this week,
   XP last week, weekly history per student, class totals, and streaks. Weeks start Monday (UTC).
 
+### Students add themselves
+
+Anyone can join straight from the tracker page — no repo access needed:
+
+1. Open the tracker page and type your Duolingo username into the **Add yourself** box.
+   **Show my XP** gives an instant preview when the free relay services are up.
+2. Press **Join the class tracker** — it opens a prefilled GitHub issue titled `join: <username>`
+   (a free GitHub account is needed to submit it). The
+   [Join tracker workflow](.github/workflows/join.yml) verifies the profile with Duolingo,
+   adds it to [data/usernames.json](data/usernames.json), takes an immediate XP snapshot,
+   replies on the issue, and closes it. The tracker page polls and refreshes itself once
+   the data lands (about a minute).
+3. No GitHub account? The repo owner can add usernames to
+   [data/usernames.json](data/usernames.json) directly.
+
 ### Setup (one time)
 
-1. Put everyone's real Duolingo usernames in [data/usernames.json](data/usernames.json)
-   (profiles must **not** be set to private in Duolingo → Settings → Privacy).
-2. On GitHub, open the **Actions** tab and enable workflows if prompted.
-3. Run **Track Duolingo XP** once manually (Actions → Track Duolingo XP → Run workflow) to record
+1. On GitHub, open the **Actions** tab and enable workflows if prompted.
+2. Run **Track Duolingo XP** once manually (Actions → Track Duolingo XP → Run workflow) to record
    the first snapshot. After that it runs automatically every day.
-4. The teacher bookmarks the tracker page — with GitHub Pages enabled it's at
+3. The teacher bookmarks the tracker page — with GitHub Pages enabled it's at
    `https://<user>.github.io/duolingo-for-schools-2.0/tracker.html`.
 
 > Notes: this uses Duolingo's public, unofficial profile endpoint, so it only reads data anyone
