@@ -29,6 +29,21 @@
           "streak": 3931
         }
       }
+    },
+    {
+      "date": "2026-09-03",
+      "users": {
+        "Duolingo": {
+          "name": "Duolingo",
+          "totalXp": 1370,
+          "streak": 0
+        },
+        "Luis": {
+          "name": "Luis",
+          "totalXp": 153363,
+          "streak": 3932
+        }
+      }
     }
   ]
 }
