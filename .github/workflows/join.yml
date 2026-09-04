@@ -37,12 +37,12 @@ jobs:
       - name: Commit
         if: steps.req.outputs.status == 'added'
         env:
-          NEW_USERNAME: ${{ steps.req.outputs.username }}
+          ADDED: ${{ steps.req.outputs.added }}
         run: |
           git config user.name "xp-tracker-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/usernames.json data/xp-history.json
-          git diff --cached --quiet || git commit -m "Join tracker: $NEW_USERNAME"
+          git diff --cached --quiet || git commit -m "Join tracker: $ADDED added via issue"
           for i in 1 2 3; do git push && break || { git pull --rebase; sleep 3; }; done
 
       - name: Reply and close
@@ -51,16 +51,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NUM: ${{ github.event.issue.number }}
           STATUS: ${{ steps.req.outputs.status }}
-          USERNAME: ${{ steps.req.outputs.username }}
-          XP: ${{ steps.req.outputs.xp }}
-          REASON: ${{ steps.req.outputs.reason }}
+          ADDED: ${{ steps.req.outputs.added }}
+          REPORT: ${{ steps.req.outputs.report }}
         run: |
           if [ "$STATUS" = "added" ]; then
-            MSG="✅ Welcome, **$USERNAME**! You're on the class tracker with $XP total XP so far. The tracker page updates itself within a couple of minutes."
+            HEAD="✅ Welcome to the class tracker ($ADDED added)! The tracker page updates itself within a couple of minutes."
           elif [ "$STATUS" = "exists" ]; then
-            MSG="ℹ️ **$USERNAME** is already on the class tracker — check the tracker page."
+            HEAD="ℹ️ Already on the class tracker — check the tracker page."
           else
-            MSG="❌ Couldn't add that username. $REASON"
+            HEAD="❌ Couldn't add anyone from this issue:"
           fi
-          gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "$MSG"
+          BODY="$HEAD"$'\n\n'"$REPORT"
+          gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           gh issue close "$NUM" --repo "$GITHUB_REPOSITORY"

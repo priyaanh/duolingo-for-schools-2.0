@@ -131,9 +131,18 @@ function joinBoxHtml(forceOpen = false) {
       <div id="join-result"></div>
       <p style="font-weight:700;color:var(--ink-soft);font-size:13px;margin-top:8px;">
         <strong>No account needed:</strong> just give your Duolingo username to whoever runs this
-        tracker — they paste it into the <em>Add students</em> button on GitHub and you're on within
-        a minute. Already have a GitHub account? <strong>Join the class tracker</strong> files the
+        tracker. Already have a GitHub account? <strong>Join the class tracker</strong> files the
         request for you automatically instead.
+      </p>
+      <hr style="border:none;border-top:2px solid var(--line);margin:14px 0;" />
+      <p style="font-weight:800;font-size:14px;">👩‍🏫 Adding the whole class at once?</p>
+      <div class="form-row">
+        <input id="join-bulk" placeholder="Paste everyone's usernames, e.g. maria_g juanp alex.duo" style="flex:1;min-width:230px;" />
+        <button class="btn small" id="join-bulk-btn">Add the whole class</button>
+      </div>
+      <p style="font-weight:700;color:var(--ink-soft);font-size:12px;">
+        Opens one prefilled GitHub request with every name — the robot checks each one against
+        Duolingo and replies with a per-name report.
       </p>
     </details>`;
 }
@@ -206,6 +215,33 @@ function bindJoinBox(trackedLower) {
 
   if (input.addEventListener) {
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
+  }
+
+  const bulkBtn = document.getElementById("join-bulk-btn");
+  const bulkInput = document.getElementById("join-bulk");
+  if (bulkBtn && bulkBtn.addEventListener && bulkInput) {
+    const submitBulk = () => {
+      const names = Array.from(
+        new Set(String(bulkInput.value || "").split(/[\s,;]+/).map((s) => s.trim().replace(/^@/, "")).filter(Boolean))
+      );
+      const valid = names.filter((n) => USERNAME_RE.test(n));
+      if (!valid.length) {
+        setJoinResult(`<p style="color:var(--red);font-weight:800;">Paste at least one valid Duolingo username (separated by spaces or commas).</p>`);
+        return;
+      }
+      const skipped = names.length - valid.length;
+      window.open(issueUrl(valid.join(" ")), "_blank");
+      valid.forEach(rememberUsername);
+      startWatch(valid[0]);
+      setJoinResult(`
+        <p style="font-weight:800;color:var(--blue-dark);">
+          ⏳ Submitting ${valid.length} username${valid.length === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped as invalid)` : ""} —
+          press <strong>Submit new issue</strong> on the GitHub page that just opened, and this page
+          will refresh itself when the robot finishes.
+        </p>`);
+    };
+    bulkBtn.addEventListener("click", submitBulk);
+    if (bulkInput.addEventListener) bulkInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBulk(); });
   }
 }
 
@@ -348,6 +384,21 @@ function dailyChartHtml(snaps) {
     </div>`;
 }
 
+/* -------------------- FAQ -------------------- */
+
+function faqHtml() {
+  return `
+    <details class="card collapser" style="margin-top:14px;">
+      <summary>❓ Help — my XP isn't showing</summary>
+      <ul style="margin:12px 0 4px 22px;font-weight:700;line-height:1.9;">
+        <li><strong>Profile set to private?</strong> In the Duolingo app: Profile → Settings → Privacy — the tracker can only see public profiles.</li>
+        <li><strong>Username spelled exactly right?</strong> It's the @username on your Duolingo profile page, not your display name.</li>
+        <li><strong>Just added or just practiced?</strong> XP updates once a night (just after midnight Pacific), so today's lessons show up tomorrow. Whoever runs the tracker can trigger an instant refresh: GitHub → Actions → Track Duolingo XP → Run workflow.</li>
+        <li><strong>Weekly numbers look small?</strong> "This week" starts fresh every Monday and only counts XP earned since tracking began.</li>
+      </ul>
+    </details>`;
+}
+
 /* -------------------- setup help -------------------- */
 
 function setupHelp(reason) {
@@ -388,7 +439,7 @@ function render(cfg, history) {
     const reason = usernames.length
       ? `${usernames.length} username${usernames.length === 1 ? " is" : "s are"} configured, but no snapshots have been recorded yet.`
       : "No Duolingo usernames are configured yet, so there is nothing to track.";
-    root.innerHTML = head + joinBoxHtml(true) + setupHelp(reason);
+    root.innerHTML = head + joinBoxHtml(true) + setupHelp(reason) + faqHtml();
     const emptySet = new Set(usernames.map((u) => u.toLowerCase()));
     bindJoinBox(emptySet);
     resumeWatchIfPending(emptySet);
@@ -598,7 +649,9 @@ function render(cfg, history) {
           <tr><td><strong>Class total</strong></td>${historyTotals}</tr>
         </tbody>
       </table></div>
-    </details>`;
+    </details>
+
+    ${faqHtml()}`;
 
   mountLeaderboard("week");
   bindJoinBox(trackedLower);
@@ -607,6 +660,19 @@ function render(cfg, history) {
 }
 
 (async () => {
+  const shareBtn = document.getElementById("share-btn");
+  if (shareBtn && shareBtn.addEventListener) {
+    shareBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        shareBtn.textContent = "✅ Copied!";
+      } catch (e) {
+        try { if (navigator.share) navigator.share({ url: location.href }); } catch (e2) { /* fine */ }
+      }
+      setTimeout(() => { shareBtn.textContent = "🔗 Copy link"; }, 1500);
+    });
+  }
+
   const root = document.getElementById("tracker-root");
   try {
     const [cfg, history] = await Promise.all([loadJson("data/usernames.json"), loadJson("data/xp-history.json")]);

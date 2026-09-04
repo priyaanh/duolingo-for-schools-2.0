@@ -76,15 +76,17 @@ teacher can keep seeing how much XP each student earns per week on the *real* Du
 
 ### Adding the class (no student accounts needed)
 
-Classmates don't need GitHub — they just tell whoever runs the repo their Duolingo username.
-The owner then adds everyone in one paste:
+Classmates don't need GitHub — they just tell whoever runs the tracker their Duolingo username.
+Then add everyone in one paste, either way:
 
-1. Open the repo's **Actions** tab → **Add students** → **Run workflow**.
-2. Paste the usernames (separated by spaces or commas) and press **Run workflow**.
-3. The workflow checks each name against Duolingo (skipping typos, duplicates, and private
-   profiles with a per-name explanation in the run summary), adds the valid ones to
-   [data/usernames.json](data/usernames.json), and records everyone's XP immediately.
-   The tracker page updates within a minute or two.
+- **From the tracker page:** open **➕ Add yourself** → paste all the usernames into the
+  **Adding the whole class?** box → it opens one prefilled GitHub request (`join: name1 name2 …`)
+  — submit it and the robot enrolls everyone and replies with a per-name report.
+- **From GitHub:** **Actions** tab → **Add students** → **Run workflow** → paste the usernames.
+
+Either way, each name is checked against Duolingo (typos, duplicates, and private profiles are
+skipped with an explanation), added to [data/usernames.json](data/usernames.json), and everyone's
+XP is recorded immediately. The tracker page updates within a minute or two.
 
 Students can also preview their XP anytime with the **Show my XP** box on the tracker page.
 
