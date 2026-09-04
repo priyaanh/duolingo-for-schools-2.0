@@ -360,7 +360,7 @@ function dailyChartHtml(snaps) {
       const r = Math.min(4, bw / 2, h);
       const shape = h <= 0.5
         ? `<line x1="${x}" y1="${baseY}" x2="${x + bw}" y2="${baseY}" stroke="var(--line)" stroke-width="2"/>`
-        : `<path class="xp-bar" d="M${x},${baseY} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} L${x + bw - r},${yTop} Q${x + bw},${yTop} ${x + bw},${yTop + r} L${x + bw},${baseY} Z" fill="#46a302">
+        : `<path class="xp-bar" d="M${x},${baseY} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} L${x + bw - r},${yTop} Q${x + bw},${yTop} ${x + bw},${yTop + r} L${x + bw},${baseY} Z">
              <title>${escT(shortDay(d.date))} — ${fmt(d.gain)} XP</title>
            </path>`;
       const xLabel = i % labelEvery === 0
@@ -695,6 +695,20 @@ function render(cfg, history) {
 }
 
 (async () => {
+  // When printing, open the collapsed sections so the tables land on paper,
+  // then restore them afterwards.
+  if (typeof window !== "undefined" && window.addEventListener && document.querySelectorAll) {
+    let reopened = [];
+    window.addEventListener("beforeprint", () => {
+      reopened = Array.from(document.querySelectorAll("details:not([open])"));
+      reopened.forEach((d) => { d.open = true; });
+    });
+    window.addEventListener("afterprint", () => {
+      reopened.forEach((d) => { d.open = false; });
+      reopened = [];
+    });
+  }
+
   const shareBtn = document.getElementById("share-btn");
   if (shareBtn && shareBtn.addEventListener) {
     shareBtn.addEventListener("click", async () => {

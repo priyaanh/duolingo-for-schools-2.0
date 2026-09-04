@@ -24,6 +24,8 @@ no backend.
   to students, and change their PIN anytime
 - A **Load the demo classroom** link seeds sample data for anyone who just wants to explore
 - Installable as an app (web manifest) — "Add to home screen" on Chromebooks and iPads
+- **Automatic dark mode** on both pages (follows the device's light/dark setting), and the
+  tracker prints cleanly — collapsed tables open themselves for the printout
 - Note: the app is fully client-side, so PINs are classroom-level locks, not real authentication
 
 ### 🏆 Class leaderboard (practice XP)

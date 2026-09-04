@@ -1,6 +1,7 @@
 /* Duolingo for Schools 2.0 (unofficial remake) — original stylesheet */
 
 :root {
+  color-scheme: light;
   --green: #58cc02;
   --green-dark: #46a302;
   --green-pale: #d7ffb8;
@@ -17,7 +18,36 @@
   --line: #e5e5e5;
   --bg: #ffffff;
   --bg-soft: #f7f7f7;
+  --gold-pale: #fff3c4;
+  --gold-ink: #946f00;
+  --gold-shadow: #d4a600;
+  --highlight: #fff8dc;
+  --disabled-ink: #afafaf;
+  --disabled-shadow: #d8d8d8;
+  --chart-bar: #46a302; /* contrast-checked vs light surface */
   --radius: 16px;
+}
+
+/* Automatic dark theme (follows the device setting) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ink: #f1f7fb;
+    --ink-soft: #9aa8b0;
+    --line: #37464f;
+    --bg: #131f24;
+    --bg-soft: #202f36;
+    --green-pale: #1d3410;
+    --blue-pale: #0d2836;
+    --red-pale: #3a171a;
+    --gold-pale: #3a3210;
+    --gold-ink: #ffd76a;
+    --gold-shadow: #6b5a00;
+    --highlight: #33300f;
+    --disabled-ink: #6b7a82;
+    --disabled-shadow: #0d1518;
+    --chart-bar: #58cc02; /* 8:1 vs dark surface */
+  }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -118,8 +148,8 @@ input, select { font-family: inherit; }
 
 .btn:disabled {
   background: var(--line);
-  color: #afafaf;
-  box-shadow: 0 4px 0 #d8d8d8;
+  color: var(--disabled-ink);
+  box-shadow: 0 4px 0 var(--disabled-shadow);
   cursor: not-allowed;
 }
 
@@ -317,7 +347,7 @@ tr + tr td { border-top: 1px solid var(--line); }
 .skill-node:hover .bubble { transform: translateY(-2px); }
 
 .skill-node.started .bubble { background: var(--green-pale); border-color: var(--green); box-shadow: 0 6px 0 var(--green-dark); }
-.skill-node.maxed .bubble { background: #fff3c4; border-color: var(--yellow); box-shadow: 0 6px 0 #d4a600; }
+.skill-node.maxed .bubble { background: var(--gold-pale); border-color: var(--yellow); box-shadow: 0 6px 0 var(--gold-shadow); }
 
 .skill-node .name { font-weight: 800; font-size: 14px; }
 .skill-node .crowns { font-size: 12px; color: var(--ink-soft); font-weight: 700; }
@@ -580,7 +610,7 @@ tr + tr td { border-top: 1px solid var(--line); }
 
 /* ---------- Daily XP chart ---------- */
 
-.xp-bar { transition: filter 0.1s; cursor: default; }
+.xp-bar { fill: var(--chart-bar); transition: filter 0.1s; cursor: default; }
 .xp-bar:hover { filter: brightness(1.25); }
 
 /* ---------- Profile links (tracker) ---------- */
@@ -639,7 +669,9 @@ details.collapser[open] > summary::after { content: "▴"; }
 .podium .first .stand { height: 96px; background: var(--yellow); }
 .podium .second .stand { height: 72px; background: #b7bdc4; }
 .podium .third .stand { height: 56px; background: #d29b6c; }
-.podium .first .avatar-circle { border-color: var(--yellow); background: #fff3c4; color: #946f00; }
+.podium .first .avatar-circle { border-color: var(--yellow); background: var(--gold-pale); color: var(--gold-ink); }
+
+.best { background: var(--highlight); }
 
 .lb-list { border: 2px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .lb-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; font-weight: 800; }
@@ -660,4 +692,16 @@ footer.site {
   .topbar { padding: 10px 12px; }
   .brand { font-size: 16px; }
   .page { padding: 18px 12px 80px; }
+}
+
+/* ---------- Print (teacher reports from the tracker) ---------- */
+
+@media print {
+  :root { color-scheme: light; }
+  body { background: #fff; color: #000; }
+  .topbar, #join-details, .lb-toggle, footer.site, #share-btn { display: none !important; }
+  details.collapser { border: none; padding: 0; }
+  details.collapser > summary { display: none; } /* tracker.js opens collapsed sections on beforeprint */
+  .card, .stat, .table-wrap, .lb-list, .assignment-card { border-color: #bbb; break-inside: avoid; }
+  a { text-decoration: none; color: inherit; }
 }
