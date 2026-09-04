@@ -489,14 +489,18 @@ function render(cfg, history) {
   const thisWeek = weekStart(todayLocal());
   const lastWeek = addDays(thisWeek, -7);
 
+  const prevSnap = snaps.length > 1 ? snaps[snaps.length - 2] : null;
+
   const rows = allUsers
     .map((u) => {
       const info = latest.users[u];
+      const prevStreak = prevSnap && prevSnap.users[u] ? prevSnap.users[u].streak : null;
       return {
         username: u,
         name: info ? info.name : u,
         tracked: !!info,
         isTeacher: teacherSet.has(u.toLowerCase()),
+        lostStreak: info && prevStreak !== null && info.streak < prevStreak && prevStreak >= 3 ? prevStreak : 0,
         totalXp: info ? info.totalXp : null,
         streak: info ? info.streak : null,
         thisWeek: weeklyGain(u, thisWeek),
@@ -594,10 +598,39 @@ function render(cfg, history) {
           <td class="${(r.thisWeek || 0) > 0 ? "cell-good" : "cell-warn"}">${r.thisWeek === null ? "—" : "⚡ " + fmt(r.thisWeek)}</td>
           <td>${r.lastWeek === null ? "—" : "⚡ " + fmt(r.lastWeek)}</td>
           <td>${fmt(r.totalXp)}</td>
-          <td>🔥 ${fmt(r.streak)}</td>
+          <td>🔥 ${fmt(r.streak)}${r.lostStreak ? ` <span title="Lost a ${fmt(r.lostStreak)}-day streak — time to restart!">💔</span>` : ""}</td>
         </tr>`;
     })
     .join("");
+
+  // Hall of fame: the student who earned the most XP in each completed week.
+  const completedWeeks = weeks.filter((w) => w < thisWeek).slice(-6);
+  const winnerCards = completedWeeks
+    .map((w) => {
+      let best = null, bestGain = 0;
+      allUsers.forEach((u) => {
+        if (teacherSet.has(u.toLowerCase())) return;
+        const g = weeklyGain(u, w) || 0;
+        if (g > bestGain) { bestGain = g; best = u; }
+      });
+      if (!best) return "";
+      const nm = latest.users[best] ? latest.users[best].name : best;
+      return `
+        <div class="assignment-card" style="padding:10px 14px;">
+          <span class="icon">🥇</span>
+          <div class="meta">
+            <strong>${profileLink(best, escT(nm))}</strong><br/>
+            <span class="due">${escT(weekLabel(w))} · ⚡ ${fmt(bestGain)} XP</span>
+          </div>
+        </div>`;
+    })
+    .filter(Boolean)
+    .reverse()
+    .join("");
+  const hallOfFame = winnerCards
+    ? `<h2 class="section-title">🏛 Weekly winners</h2>
+       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">${winnerCards}</div>`
+    : "";
 
   const historyWeeks = weeks.slice(-8);
   const historyHead = historyWeeks.map((w) => `<th>${escT(weekLabel(w))}</th>`).join("");
@@ -630,6 +663,8 @@ function render(cfg, history) {
     <div id="lb-section"></div>
 
     ${dailyChartHtml(snaps)}
+
+    ${hallOfFame}
 
     ${joinBoxHtml()}
 

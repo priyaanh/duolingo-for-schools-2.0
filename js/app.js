@@ -1017,6 +1017,7 @@ function renderStudentHome() {
       : "";
 
   const course = courseOfClassroom(myClasses[0]);
+  const trickyCount = trickyWordsFor(s, course).length;
   const tree = course.skills
     .map((sk) => {
       const lvl = s.skillLevels[sk.id] || 0;
@@ -1057,6 +1058,15 @@ function renderStudentHome() {
 
       <h2 class="section-title">📌 Assignments from your teacher</h2>
       ${assignmentCards || `<div class="empty">🎉 Nothing due — you're all caught up!</div>`}
+      ${trickyCount >= 3 ? `
+      <div class="assignment-card" style="border-color:var(--purple);margin-top:14px;">
+        <span class="icon">💪</span>
+        <div class="meta">
+          <strong>Practice your tricky words</strong><br/>
+          <span class="due">${trickyCount} word${trickyCount === 1 ? "" : "s"} you've missed recently — clear them by getting them right!</span>
+        </div>
+        <button class="btn small" id="practice-btn" style="background:var(--purple);box-shadow:0 4px 0 #a856d6;">Practice</button>
+      </div>` : ""}
       ${classLeaderboard}
 
       <h2 class="section-title">${course.flag} ${course.title} — Skill tree</h2>
@@ -1087,6 +1097,9 @@ function renderStudentHome() {
       save();
       alert(t ? "PIN saved! You'll need it next time you log in." : "PIN removed.");
     });
+  const practiceBtn = $("#practice-btn");
+  if (practiceBtn) practiceBtn.addEventListener("click", startPractice);
+
   $$("[data-start-assignment]").forEach((el) =>
     el.addEventListener("click", () => startLesson(el.dataset.skill, el.dataset.startAssignment))
   );
@@ -1137,7 +1150,8 @@ function makeChoice(word, skill, dir, course) {
     options: shuffle([answer, ...distractors]),
     answer,
     speak: toEnglish ? word.es : word.en,
-    speakLang: toEnglish ? course.lang : "en-US"
+    speakLang: toEnglish ? course.lang : "en-US",
+    wordKey: word.es
   };
 }
 
@@ -1148,7 +1162,8 @@ function makeType(word, course) {
     prompt: word.es,
     answer: word.en,
     speak: word.es,
-    speakLang: course.lang
+    speakLang: course.lang,
+    wordKey: word.es
   };
 }
 
@@ -1163,7 +1178,8 @@ function makeListen(word, skill, course) {
     options: shuffle([word.es, ...distractors]),
     answer: word.es,
     speak: word.es,
-    speakLang: course.lang
+    speakLang: course.lang,
+    wordKey: word.es
   };
 }
 
@@ -1202,6 +1218,7 @@ function startLesson(skillId, assignmentId) {
   session = {
     skillId,
     assignmentId,
+    practice: false,
     queue,
     total: queue.length,
     correct: 0,
@@ -1209,7 +1226,60 @@ function startLesson(skillId, assignmentId) {
     hearts: 3,
     finished: false,
     failed: false,
-    rewarded: false
+    rewarded: false,
+    missed: [],
+    corrects: []
+  };
+  go({ name: "lesson" });
+}
+
+// A review lesson built only from words this student has been getting wrong.
+// No crowns and no assignment credit — just XP and mastery.
+function generatePractice(words, course) {
+  const pool = shuffle(words).slice(0, 8);
+  const distractorSkill = {
+    words: pool.length >= 4 ? pool : pool.concat(sample(course.skills.flatMap((sk) => sk.words), 6))
+  };
+  const exercises = [];
+  if (pool.length >= 4) exercises.push(makeMatch({ words: pool }));
+  const kinds = ["choice", "type", "reverse-choice"];
+  pool.forEach((w, i) => {
+    const kind = kinds[i % kinds.length];
+    if (kind === "choice") exercises.push(makeChoice(w, distractorSkill, "target-en", course));
+    else if (kind === "reverse-choice") exercises.push(makeChoice(w, distractorSkill, "en-target", course));
+    else exercises.push(makeType(w, course));
+  });
+  return shuffle(exercises).slice(0, 8);
+}
+
+function trickyWordsFor(student, course) {
+  const all = course.skills.flatMap((sk) => sk.words);
+  return Object.keys(student.trickyWords || {})
+    .map((k) => all.find((w) => w.es === k))
+    .filter(Boolean);
+}
+
+function startPractice() {
+  const s = getStudent(state.activeStudentId);
+  if (!s) return;
+  const course = courseOfClassroom(classroomsOf(s.id)[0]);
+  const words = trickyWordsFor(s, course);
+  if (!words.length) return;
+  const queue = generatePractice(words, course);
+  session = {
+    skillId: null,
+    assignmentId: null,
+    practice: true,
+    queue,
+    total: queue.length,
+    correct: 0,
+    mistakes: 0,
+    hearts: 3,
+    finished: false,
+    failed: false,
+    rewarded: false,
+    missed: [],
+    corrects: []
   };
   go({ name: "lesson" });
 }
@@ -1399,7 +1469,8 @@ function gradeAnswer(ok, correctAnswer) {
   if (ok) {
     playCorrect();
     session.correct++;
-    session.queue.shift();
+    const done = session.queue.shift();
+    if (done && done.wordKey && session.corrects) session.corrects.push(done.wordKey);
     footer.classList.add("good");
     msg.innerHTML = `<div class="headline">${pick(["Nicely done!", "Excellent!", "Correct!", "Great job!"])}</div>`;
   } else {
@@ -1409,8 +1480,9 @@ function gradeAnswer(ok, correctAnswer) {
     footer.classList.add("bad");
     msg.innerHTML = `<div class="headline">Incorrect</div><div class="detail">Correct answer: ${esc(correctAnswer)}</div>`;
     // Requeue the missed exercise so it must be answered correctly to finish.
-    const missed = session.queue.shift();
-    if (session.hearts > 0) session.queue.push(missed);
+    const missedEx = session.queue.shift();
+    if (missedEx && missedEx.wordKey && session.missed) session.missed.push(missedEx.wordKey);
+    if (session.hearts > 0) session.queue.push(missedEx);
     else session.failed = true;
   }
 
@@ -1432,7 +1504,19 @@ function applyRewards() {
 
   session.xpEarned = 10 + (session.mistakes === 0 ? 5 : 0);
   s.xp += session.xpEarned;
-  s.skillLevels[session.skillId] = Math.min(3, (s.skillLevels[session.skillId] || 0) + 1);
+  if (!session.practice) {
+    s.skillLevels[session.skillId] = Math.min(3, (s.skillLevels[session.skillId] || 0) + 1);
+  }
+
+  // Remember which words were missed; getting one right later clears it.
+  s.trickyWords = s.trickyWords || {};
+  (session.missed || []).forEach((k) => { s.trickyWords[k] = Math.min(5, (s.trickyWords[k] || 0) + 1); });
+  (session.corrects || []).forEach((k) => {
+    if (s.trickyWords[k]) {
+      s.trickyWords[k]--;
+      if (s.trickyWords[k] <= 0) delete s.trickyWords[k];
+    }
+  });
 
   const today = todayStr();
   if (s.lastActive !== today) {
@@ -1446,13 +1530,15 @@ function applyRewards() {
   else s.today = { date: today, xp: session.xpEarned };
 
   // Any assignment in this student's classrooms for this skill counts as turned in.
-  classroomsOf(s.id).forEach((c) =>
-    c.assignments.forEach((a) => {
-      if (a.skillId === session.skillId && !s.completedAssignments.includes(a.id)) {
-        s.completedAssignments.push(a.id);
-      }
-    })
-  );
+  if (!session.practice) {
+    classroomsOf(s.id).forEach((c) =>
+      c.assignments.forEach((a) => {
+        if (a.skillId === session.skillId && !s.completedAssignments.includes(a.id)) {
+          s.completedAssignments.push(a.id);
+        }
+      })
+    );
+  }
   save();
 }
 
@@ -1471,8 +1557,8 @@ function renderLessonComplete() {
     <div class="confetti" aria-hidden="true">${confetti}</div>
     <div class="finish">
       <div class="big">${perfect ? "🏆" : "🎉"}</div>
-      <h1>Lesson complete!</h1>
-      <p>${skill ? esc(skill.title) : ""} · ${perfect ? "Perfect lesson — no mistakes!" : "Nice work, keep practicing!"}</p>
+      <h1>${session.practice ? "Practice complete!" : "Lesson complete!"}</h1>
+      <p>${session.practice ? "Tricky words" : skill ? esc(skill.title) : ""} · ${perfect ? "Perfect — no mistakes!" : "Nice work, keep practicing!"}</p>
       <div class="stat-row">
         <div class="stat"><div class="num">⚡ ${session.xpEarned || 0}</div><div class="lbl">XP earned</div></div>
         <div class="stat"><div class="num">🎯 ${Math.round((session.total / (session.total + session.mistakes)) * 100)}%</div><div class="lbl">Accuracy</div></div>
@@ -1500,7 +1586,9 @@ function renderLessonFailed() {
     </div>`,
     { chrome: false }
   );
-  $("#retry-btn").addEventListener("click", () => startLesson(session.skillId, session.assignmentId));
+  $("#retry-btn").addEventListener("click", () =>
+    session.practice ? startPractice() : startLesson(session.skillId, session.assignmentId)
+  );
   $("#home-btn").addEventListener("click", () => {
     session = null;
     go({ name: "student-home" });
