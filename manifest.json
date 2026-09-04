@@ -1,7 +1,7 @@
 {
-  "name": "Duolingo for Schools 2.0 (Unofficial)",
+  "name": "Duolingo for Schools 2.0",
   "short_name": "DFS 2.0",
-  "description": "Unofficial classroom remake: lessons, assignments, XP tracking, and a class leaderboard.",
+  "description": "Fan-made classroom app: lessons, assignments, XP tracking, and a class leaderboard. Not affiliated with Duolingo.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",

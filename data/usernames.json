@@ -1,7 +1,8 @@
 {
-  "_help": "Add each class member's real Duolingo username to the list below (profiles must not be private). Example: \"usernames\": [\"alice123\", \"bob_learns\"]. The \"Duolingo\" entry is a demo profile - replace it with your class.",
+  "_help": "Add each class member's real Duolingo username to 'usernames' (profiles must not be private). Anyone also listed under 'teachers' gets a Teacher badge on the tracker and is kept out of the student leaderboard and class totals. The Duolingo/Luis entries are demo profiles - replace them with your class.",
   "usernames": [
     "Duolingo",
     "Luis"
-  ]
+  ],
+  "teachers": []
 }

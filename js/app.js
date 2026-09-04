@@ -309,7 +309,6 @@ function headerHtml() {
       <button class="brand" id="brand-btn">
         <span class="mascot">🦜</span>
         <span>Duolingo for Schools 2.0</span>
-        <span class="tag">unofficial remake</span>
       </button>
       <div class="spacer"></div>
       ${roleControls}
@@ -319,7 +318,7 @@ function headerHtml() {
 }
 
 function footerHtml() {
-  return `<footer class="site">Unofficial educational remake for learning purposes — not affiliated with or endorsed by Duolingo, Inc.</footer>`;
+  return `<footer class="site">Fan-made project, not affiliated with Duolingo.</footer>`;
 }
 
 function shell(inner, { chrome = true } = {}) {
@@ -442,7 +441,7 @@ function renderOnboarding() {
       <div style="text-align:center;margin:26px 0 26px;">
         <div style="font-size:64px;">🦜</div>
         <h1 style="font-size:30px;font-weight:900;color:var(--green);">Duolingo for Schools 2.0</h1>
-        <p style="color:var(--ink-soft);font-weight:700;">Unofficial remake · Log in to start learning</p>
+        <p style="color:var(--ink-soft);font-weight:700;">Log in to start learning</p>
       </div>
       <div style="display:grid;gap:16px;">
         ${welcomeBack}
@@ -459,7 +458,7 @@ function renderOnboarding() {
         ${!hasClasses ? `<p style="text-align:center;"><button class="linkish" id="ob-demo">Just exploring? Load the demo classroom →</button></p>` : ""}
       </div>
     </main>
-    <footer class="site">Unofficial educational remake for learning purposes — not affiliated with or endorsed by Duolingo, Inc.</footer>`,
+    <footer class="site">Fan-made project, not affiliated with Duolingo.</footer>`,
     { chrome: false }
   );
 

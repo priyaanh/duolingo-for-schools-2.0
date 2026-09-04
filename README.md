@@ -88,6 +88,11 @@ The owner then adds everyone in one paste:
 
 Students can also preview their XP anytime with the **Show my XP** box on the tracker page.
 
+**Teachers on the tracker:** add the teacher's Duolingo username to `usernames` as usual, and
+also list it under `"teachers"` in [data/usernames.json](data/usernames.json). Teacher profiles
+get a 🍎 Teacher badge, sit below the student leaderboard instead of competing on it, and are
+excluded from the class XP totals.
+
 ### Optional: self-serve joining (needs a GitHub account)
 
 Anyone **with** a free GitHub account can add themselves: the **Join the class tracker** button

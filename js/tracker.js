@@ -369,6 +369,9 @@ function setupHelp(reason) {
 function render(cfg, history) {
   const root = document.getElementById("tracker-root");
   const usernames = (cfg.usernames || []).filter(Boolean);
+  // Usernames listed under "teachers" in data/usernames.json get a 🍎 badge and
+  // sit outside the student competition (no podium spot, not in class totals).
+  const teacherSet = new Set((cfg.teachers || []).map((t) => String(t).toLowerCase()));
   const snaps = (history.snapshots || [])
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -442,6 +445,7 @@ function render(cfg, history) {
         username: u,
         name: info ? info.name : u,
         tracked: !!info,
+        isTeacher: teacherSet.has(u.toLowerCase()),
         totalXp: info ? info.totalXp : null,
         streak: info ? info.streak : null,
         thisWeek: weeklyGain(u, thisWeek),
@@ -450,12 +454,13 @@ function render(cfg, history) {
     })
     .sort((a, b) => (b.thisWeek ?? -1) - (a.thisWeek ?? -1));
 
-  const bestThisWeek = Math.max(0, ...rows.map((r) => r.thisWeek ?? 0));
-  const classThisWeek = rows.reduce((a, r) => a + (r.thisWeek || 0), 0);
+  const bestThisWeek = Math.max(0, ...rows.filter((r) => !r.isTeacher).map((r) => r.thisWeek ?? 0), 0);
+  const classThisWeek = rows.reduce((a, r) => a + (r.isTeacher ? 0 : r.thisWeek || 0), 0);
 
   /* ----- podium leaderboard (This week / All time toggle) ----- */
 
-  const ranked = rows.filter((r) => r.tracked);
+  const ranked = rows.filter((r) => r.tracked && !r.isTeacher);
+  const teacherRowsData = rows.filter((r) => r.tracked && r.isTeacher);
 
   const lbValue = (r, mode) =>
     mode === "week" ? (r.thisWeek === null ? "—" : `⚡ ${fmt(r.thisWeek)}`) : `⚡ ${fmt(r.totalXp ?? 0)}`;
@@ -496,13 +501,24 @@ function render(cfg, history) {
         </div>`
       )
       .join("");
+    const teacherRows = teacherRowsData
+      .map(
+        (r) => `
+        <div class="lb-row">
+          <span class="rank">🍎</span>
+          <span class="nm">${profileLink(r.username, escT(r.name))} <span class="muted">@${escT(r.username)}</span> <span class="chip done">Teacher</span></span>
+          <span class="val">${lbValue(r, mode)}</span>
+        </div>`
+      )
+      .join("");
     return `
       <div class="mode-switch lb-toggle">
         <button id="lb-week-btn" class="${mode === "week" ? "active" : ""}">This week</button>
         <button id="lb-all-btn" class="${mode === "all" ? "active" : ""}">All time</button>
       </div>
       ${podium}
-      ${rest ? `<div class="lb-list">${rest}</div>` : ""}`;
+      ${rest ? `<div class="lb-list">${rest}</div>` : ""}
+      ${teacherRows ? `<div class="lb-list" style="margin-top:10px;">${teacherRows}</div>` : ""}`;
   }
 
   function mountLeaderboard(mode) {
@@ -519,11 +535,11 @@ function render(cfg, history) {
     .map((r, i) => {
       if (!r.tracked)
         return `<tr><td>❓ <strong>${escT(r.username)}</strong></td><td colspan="4" class="muted">not found yet — check the username spelling and that the profile isn't private</td></tr>`;
-      const medal = i === 0 && (r.thisWeek || 0) > 0 ? "🥇" : i === 1 && (r.thisWeek || 0) > 0 ? "🥈" : i === 2 && (r.thisWeek || 0) > 0 ? "🥉" : "";
+      const medal = r.isTeacher ? "" : i === 0 && (r.thisWeek || 0) > 0 ? "🥇" : i === 1 && (r.thisWeek || 0) > 0 ? "🥈" : i === 2 && (r.thisWeek || 0) > 0 ? "🥉" : "";
       const mine = isMine(r.username) ? "⭐ " : "";
       return `
-        <tr class="${r.thisWeek === bestThisWeek && bestThisWeek > 0 ? "best" : ""}">
-          <td>${medal} ${mine}<strong>${profileLink(r.username, escT(r.name))}</strong> <span class="muted">@${escT(r.username)}</span></td>
+        <tr class="${!r.isTeacher && r.thisWeek === bestThisWeek && bestThisWeek > 0 ? "best" : ""}">
+          <td>${medal} ${mine}<strong>${profileLink(r.username, escT(r.name))}</strong> <span class="muted">@${escT(r.username)}</span>${r.isTeacher ? ' <span class="chip done">🍎 Teacher</span>' : ""}</td>
           <td class="${(r.thisWeek || 0) > 0 ? "cell-good" : "cell-warn"}">${r.thisWeek === null ? "—" : "⚡ " + fmt(r.thisWeek)}</td>
           <td>${r.lastWeek === null ? "—" : "⚡ " + fmt(r.lastWeek)}</td>
           <td>${fmt(r.totalXp)}</td>
