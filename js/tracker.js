@@ -463,8 +463,8 @@ function joinBoxHtml(forceOpen = false) {
       <p class="muted" style="font-weight:700;color:var(--ink-soft);font-size:14px;margin-top:10px;">
         Use this to put people on the <strong>shared</strong> tracker — visible to the whole class on
         any device, with weekly history. It submits through GitHub (a free account is needed to press
-        Submit). Just want a quick list on your own screen? Use the green box above instead.
-        Profiles must not be private (Duolingo → Settings → Privacy).
+        Submit). Just want a quick list on your own screen? Use the green box on the
+        <strong>Students</strong> tab instead. Profiles must not be private (Duolingo → Settings → Privacy).
       </p>
       <div class="form-row">
         <input id="join-username" placeholder="Your Duolingo username" maxlength="30" autocomplete="off" />
@@ -759,6 +759,90 @@ function faqHtml() {
     </details>`;
 }
 
+/* -------------------- dashboard shell (sidebar + tabs) -------------------- */
+
+function gotoTab(name) {
+  if (typeof document.querySelectorAll !== "function") return;
+  const want = name === "students-add" ? "students" : name;
+  const panes = document.querySelectorAll(".tabpane");
+  if (!panes.length) return;
+  panes.forEach((p) => { p.hidden = p.id !== `tab-${want}`; });
+  document.querySelectorAll("[data-tabbtn]").forEach((b) => {
+    if (b.classList) b.classList.toggle("active", b.getAttribute("data-tabbtn") === want);
+  });
+  document.querySelectorAll(".side-item[data-goto]").forEach((b) => {
+    if (b.classList) b.classList.toggle("active", (b.getAttribute("data-goto") || "") === want);
+  });
+  try { localStorage.setItem("dfs2-tab", want); } catch { /* fine */ }
+  if (name === "students-add") {
+    const d = document.getElementById("local-class");
+    if (d) d.open = true;
+    const inp = document.getElementById("local-add-input");
+    if (inp && inp.scrollIntoView) inp.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (inp && inp.focus) inp.focus();
+  }
+}
+
+function renderShell({ className, sub = "", students = "", reports = "", settings = "" }) {
+  const root = document.getElementById("tracker-root");
+  let active = "students";
+  try { active = localStorage.getItem("dfs2-tab") || "students"; } catch { /* fine */ }
+  if (!["students", "reports", "settings"].includes(active)) active = "students";
+  const tabBtn = (id, label) => `<button data-tabbtn="${id}" class="${active === id ? "active" : ""}">${label}</button>`;
+  root.innerHTML = `
+    <div class="class-head"><span class="class-ico">🏫</span><h1>${escT(className)}</h1></div>
+    ${sub ? `<div style="padding:6px 28px 0;">${sub}</div>` : ""}
+    <div class="tabs main-tabs">
+      ${tabBtn("students", "Students")}${tabBtn("reports", "Reports")}${tabBtn("settings", "Settings")}
+    </div>
+    <div class="tabpane" id="tab-students" ${active === "students" ? "" : "hidden"}>${students}</div>
+    <div class="tabpane" id="tab-reports" ${active === "reports" ? "" : "hidden"}>${reports}</div>
+    <div class="tabpane" id="tab-settings" ${active === "settings" ? "" : "hidden"}>${settings}</div>`;
+  const sideName = document.getElementById("side-class-name");
+  if (sideName) sideName.textContent = className;
+  if (typeof document.querySelectorAll === "function") {
+    document.querySelectorAll("[data-tabbtn]").forEach((b) =>
+      b.addEventListener("click", () => gotoTab(b.getAttribute("data-tabbtn")))
+    );
+  }
+}
+
+function welcomeChecklistHtml() {
+  return `
+    <div style="text-align:center;margin:26px 0 0;">
+      <div style="font-size:64px;">🦜</div>
+      <h2 style="font-size:26px;font-weight:900;margin-top:8px;">Welcome!</h2>
+    </div>
+    <div class="check-steps">
+      <div class="check-step">
+        <div class="check-dot done">✓</div>
+        <div><h3>Create a classroom</h3></div>
+      </div>
+      <div class="check-step">
+        <div class="check-dot todo">2</div>
+        <div>
+          <h3>Add students</h3>
+          <p>Add your students' Duolingo usernames to start tracking their weekly XP.</p>
+          <p style="margin-top:14px;"><button class="btn blue" id="welcome-add-btn">Add students</button></p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function classCodeCardHtml(cfg) {
+  return `
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="font-weight:900;margin-bottom:6px;">🔒 Class code</h3>
+      <p class="muted" style="font-weight:700;font-size:14px;">
+        ${cfg && cfg.classCodeHash
+          ? "A class code is <strong>on</strong> — students type it once per device to open this board."
+          : "No class code is set — anyone with the link can view the board."}
+        Set or change it on GitHub: <strong>Actions → Add students → class_code</strong>
+        (enter <code>off</code> to remove it). Changing the code re-locks every device.
+      </p>
+    </div>`;
+}
+
 /* -------------------- setup help -------------------- */
 
 function setupHelp(reason) {
@@ -788,19 +872,28 @@ function render(cfg, history) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .filter((s) => s.users && Object.keys(s.users).length);
 
-  const head = `<div class="page-head"><h1>📈 Class XP Tracker</h1>
-    <span class="chip done" title="Every name links to the real profile; data is fetched nightly from duolingo.com">🟢 Connected to real Duolingo</span>` +
+  const className = cfg.className || "My Class";
+  const sub =
+    `<span class="chip done" title="Every name links to the real profile; data is fetched nightly from duolingo.com">🟢 Connected to real Duolingo</span>` +
     (snaps.length
-      ? `<span class="sub">Live public profile data from duolingo.com, snapshotted nightly · latest full day: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks run Monday–Sunday, Pacific time · tap a name to open the real profile</span>`
-      : "") +
-    `</div>`;
+      ? ` <span class="sub" style="font-size:13px;font-weight:700;color:var(--ink-soft);">Nightly public-profile data · latest full day: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks run Monday–Sunday, Pacific time</span>`
+      : "");
 
   if (!snaps.length) {
     const reason = usernames.length
       ? `${usernames.length} username${usernames.length === 1 ? " is" : "s are"} configured, but no snapshots have been recorded yet.`
       : "No Duolingo usernames are configured yet, so there is nothing to track.";
-    root.innerHTML = head + localClassPanelHtml() + joinBoxHtml(true) + setupHelp(reason) + faqHtml();
+    const hasLocal = Object.keys(getLocalClass()).length > 0;
+    renderShell({
+      className,
+      sub,
+      students: (hasLocal ? "" : welcomeChecklistHtml()) + localClassPanelHtml(),
+      reports: `<div class="empty">Reports (chart, weekly winners, full history) appear once students are on the shared tracker and the first nightly snapshot lands.</div>`,
+      settings: joinBoxHtml(true) + classCodeCardHtml(cfg) + setupHelp(reason) + faqHtml()
+    });
     const emptySet = new Set(usernames.map((u) => u.toLowerCase()));
+    const wb = document.getElementById("welcome-add-btn");
+    if (wb && wb.addEventListener) wb.addEventListener("click", () => gotoTab("students-add"));
     bindLocalClass();
     bindJoinBox(emptySet);
     resumeWatchIfPending(emptySet);
@@ -1049,8 +1142,15 @@ function render(cfg, history) {
       ${goalMet ? `<p style="color:var(--green-dark);font-weight:800;font-size:13px;margin-top:6px;">Goal reached — great week! 🔥</p>` : ""}
     </div>`;
 
-  root.innerHTML = `
-    ${head}
+  const studentsPane = `
+    ${goalSection}
+
+    <h2 class="section-title">🏆 Leaderboard</h2>
+    <div id="lb-section"></div>
+
+    ${localClassPanelHtml()}`;
+
+  const reportsPane = `
     <div class="stat-row">
       <div class="stat"><div class="num">⚡ ${fmt(classThisWeek)}</div><div class="lbl">Class XP this week</div></div>
       <div class="stat"><div class="num">${rows.filter((r) => r.tracked).length}/${allUsers.length}</div><div class="lbl">Profiles tracked</div></div>
@@ -1058,43 +1158,36 @@ function render(cfg, history) {
       <div class="stat"><div class="num">${weeks.length}</div><div class="lbl">Weeks recorded</div></div>
     </div>
 
-    ${goalSection}
-
-    <h2 class="section-title">🏆 Leaderboard</h2>
-    <div id="lb-section"></div>
-
     ${dailyChartHtml(snaps)}
 
     ${hallOfFame}
 
-    ${localClassPanelHtml()}
+    <div class="form-row" style="margin:18px 0 4px;">
+      <input id="stats-search" placeholder="🔍 Search a student by name or username" style="flex:1;min-width:220px;" autocomplete="off" />
+      <button class="btn ghost small" id="export-csv">⬇️ Download CSV (for your gradebook)</button>
+    </div>
+    <p id="search-empty" class="muted" style="font-size:13px;font-weight:700;" hidden>No student matches that search.</p>
+    <h2 class="section-title">📋 Weekly details</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th><th>Trend</th></tr></thead>
+      <tbody id="leaderboard-body">${leaderboard}</tbody>
+    </table></div>
 
+    <h2 class="section-title">🗓 Weekly history (XP gained)</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th>${historyHead}</tr></thead>
+      <tbody>
+        ${historyRows}
+        <tr><td><strong>Class total</strong></td>${historyTotals}</tr>
+      </tbody>
+    </table></div>`;
+
+  const settingsPane = `
     ${joinBoxHtml()}
-
-    <details class="card collapser" style="margin-top:4px;">
-      <summary>📋 Full stats & weekly history</summary>
-      <div class="form-row" style="margin:10px 0 4px;">
-        <input id="stats-search" placeholder="🔍 Search a student by name or username" style="flex:1;min-width:220px;" autocomplete="off" />
-        <button class="btn ghost small" id="export-csv">⬇️ Download CSV (for your gradebook)</button>
-      </div>
-      <p id="search-empty" class="muted" style="font-size:13px;font-weight:700;" hidden>No student matches that search.</p>
-      <h2 class="section-title">📋 Weekly details</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th><th>Trend</th></tr></thead>
-        <tbody id="leaderboard-body">${leaderboard}</tbody>
-      </table></div>
-
-      <h2 class="section-title">🗓 Weekly history (XP gained)</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Student</th>${historyHead}</tr></thead>
-        <tbody>
-          ${historyRows}
-          <tr><td><strong>Class total</strong></td>${historyTotals}</tr>
-        </tbody>
-      </table></div>
-    </details>
-
+    ${classCodeCardHtml(cfg)}
     ${faqHtml()}`;
+
+  renderShell({ className, sub, students: studentsPane, reports: reportsPane, settings: settingsPane });
 
   mountLeaderboard("week");
   const exportBtn = document.getElementById("export-csv");
@@ -1192,6 +1285,13 @@ function gateAndRender(cfg, history) {
       reopened.forEach((d) => { d.open = false; });
       reopened = [];
     });
+  }
+
+  // Sidebar navigation
+  if (typeof document.querySelectorAll === "function") {
+    document.querySelectorAll(".side-item[data-goto]").forEach((b) =>
+      b.addEventListener("click", () => gotoTab(b.getAttribute("data-goto")))
+    );
   }
 
   const shareBtn = document.getElementById("share-btn");

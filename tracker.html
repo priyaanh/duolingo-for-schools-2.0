@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Class XP Tracker — Duolingo for Schools 2.0</title>
+  <title>Class XP Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#58cc02" />
@@ -18,24 +18,28 @@
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="tracker.html" style="text-decoration:none;">
-      <span class="mascot">🦜</span>
-      <span>Duolingo for Schools 2.0</span>
-    </a>
-    <div class="spacer"></div>
-    <span style="font-weight:900;color:var(--ink-soft);">📈 Real Duolingo XP Tracker</span>
-    <button class="btn ghost small" id="share-btn" title="Copy this page's link to share with your teacher or class">🔗 Copy link</button>
-  </header>
-
-  <main class="page" id="tracker-root">
-    <div class="empty">Loading tracker data…</div>
-  </main>
-
-  <footer class="site">
-    Reads only public Duolingo profile data (total XP and streak) via a nightly snapshot.
-    Fan-made project, not affiliated with Duolingo.
-  </footer>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="side-brand"><span style="font-size:26px;">🦜</span> <span>class xp <b>tracker</b></span></div>
+      <nav class="side-nav">
+        <button class="side-item active" data-goto="students"><span class="side-ico">🏫</span> <span id="side-class-name">MY CLASS</span></button>
+        <button class="side-item" data-goto="students-add"><span class="side-ico">➕</span> Add students</button>
+        <button class="side-item" data-goto="reports"><span class="side-ico">📊</span> Reports</button>
+        <button class="side-item" data-goto="settings"><span class="side-ico">⚙️</span> Settings</button>
+        <button class="side-item" id="share-btn"><span class="side-ico">🔗</span> Copy link</button>
+        <a class="side-item" href="https://www.duolingo.com" target="_blank" rel="noopener"><span class="side-ico">🦉</span> Duolingo</a>
+      </nav>
+    </aside>
+    <main class="main-col">
+      <div id="tracker-root">
+        <div class="empty" style="margin:24px;">Loading tracker data…</div>
+      </div>
+      <footer class="site">
+        Reads only public Duolingo profile data (total XP and streak) via a nightly snapshot.
+        Fan-made project, not affiliated with Duolingo.
+      </footer>
+    </main>
+  </div>
 
   <script src="js/tracker.js"></script>
 </body>

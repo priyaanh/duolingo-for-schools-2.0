@@ -1,5 +1,6 @@
 {
   "_help": "Add each class member's real Duolingo username to 'usernames' (profiles must not be private). Anyone also listed under 'teachers' gets a Teacher badge on the tracker and is kept out of the student leaderboard and class totals. 'classCodeHash' locks the page behind a class code (set/change it via the Add students workflow's class_code field; 'off' removes it).",
+  "className": "Spanish",
   "usernames": [],
   "teachers": [],
   "classCodeHash": 3730742951
