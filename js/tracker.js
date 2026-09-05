@@ -163,7 +163,7 @@ function localClassBoardHtml() {
   const xpCell = (e) => {
     if (typeof e.totalXp !== "number") return "—";
     const wk = localWeekXp(e);
-    return `⚡ ${fmt(wk ?? 0)} this week <span class="muted" style="font-weight:700;">(${fmt(e.totalXp)} total)</span>`;
+    return `⚡ ${fmt(wk ?? 0)} this week <span class="muted" style="font-weight:700;">(${fmt(e.totalXp)} total${e.asOf ? `, as of ${escT(e.asOf)}` : ""})</span>`;
   };
   const streakCell = (e) => (typeof e.streak === "number" ? `🔥 ${fmt(e.streak)}` : "");
 
@@ -269,7 +269,7 @@ async function fetchLocalXp(names, statusEl) {
       const dayKeys = Object.keys(hist).sort();
       while (dayKeys.length > 30) delete hist[dayKeys.shift()];
       // Merge so teacher flags and history survive the XP fetch.
-      m[n.toLowerCase()] = { ...prev, username: info.username || n, name: info.name || n, totalXp: xp, streak: info.streak ?? 0, ts: Date.now(), hist };
+      m[n.toLowerCase()] = { ...prev, username: info.username || n, name: info.name || n, totalXp: xp, streak: info.streak ?? 0, ts: Date.now(), hist, asOf: info.asOf || null };
       saveLocalClass(m);
       ok++;
     } catch (e) {
@@ -363,7 +363,10 @@ function bindLocalClass() {
     const teacherCount = valid.filter((p) => p.isTeacher).length;
     const s = document.getElementById("local-add-status");
     if (s)
-      s.innerHTML = `<p style="font-weight:800;color:${ok ? "var(--green-dark)" : "var(--red)"};">Added ${ok}${teacherCount ? ` (${teacherCount} as teacher)` : ""}${fail ? `, ${fail} couldn't be looked up right now (tap 🔄 Refresh XP to retry)` : ""}${skipped ? `, ${skipped} skipped as invalid` : ""}.</p>`;
+      s.innerHTML = `<p style="font-weight:800;color:${ok ? "var(--green-dark)" : "var(--red)"};">Added ${ok}${teacherCount ? ` (${teacherCount} as teacher)` : ""}${fail ? `, ${fail} couldn't be looked up right now` : ""}${skipped ? `, ${skipped} skipped as invalid` : ""}.</p>` +
+        (fail
+          ? `<p class="muted" style="font-weight:700;font-size:13px;">The free lookup services this page uses are down at the moment — the names are saved. Tap <strong>🔄 Refresh XP</strong> in a little while, or tap <strong>📢 Share with the whole class</strong>: the nightly robot fetches XP from GitHub's servers, which always works, and this page then shows those numbers automatically.</p>`
+          : "");
   };
 
   addBtn.addEventListener("click", addNames);
@@ -430,6 +433,16 @@ async function fetchProfile(username) {
       lastErr = e;
     }
   }
+  // Last resort: the tracker's own nightly data (same origin — always reachable).
+  // At most a day old; callers can show info.asOf to say so.
+  try {
+    const h = await loadJson("data/xp-history.json");
+    const snaps = h.snapshots || [];
+    for (let i = snaps.length - 1; i >= 0; i--) {
+      const hit = Object.entries(snaps[i].users || {}).find(([k]) => k.toLowerCase() === username.toLowerCase());
+      if (hit) return { username: hit[0], name: hit[1].name, totalXp: hit[1].totalXp, streak: hit[1].streak, asOf: snaps[i].date };
+    }
+  } catch { /* fine — fall through */ }
   const e = new Error("unreachable");
   e.unreachable = true;
   throw e;
@@ -513,7 +526,7 @@ function bindJoinBox(trackedLower) {
       setJoinResult(`
         <div style="border:2px solid var(--green);background:var(--green-pale);border-radius:12px;padding:14px;font-weight:800;">
           🎉 <strong>${profileLink(name, escT(info.name || name))}</strong> <span style="color:var(--ink-soft)">@${escT(name)}</span>
-          — ⚡ ${fmt(info.totalXp ?? 0)} total XP · 🔥 ${fmt(info.streak ?? 0)} day streak
+          — ⚡ ${fmt(info.totalXp ?? 0)} total XP · 🔥 ${fmt(info.streak ?? 0)} day streak${info.asOf ? ` <span class="muted" style="font-weight:700;">(nightly number from ${escT(info.asOf)})</span>` : ""}
           ${already
             ? `<div style="margin-top:6px;">✅ Already on the class tracker below.</div>`
             : `<div style="margin-top:6px;">Not on the class tracker yet — give this username to whoever runs the tracker (no account needed), or press <strong>Join the class tracker</strong> if you have a GitHub account.</div>`}
