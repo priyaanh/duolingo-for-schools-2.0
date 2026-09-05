@@ -1,8 +1,8 @@
 {
-  "name": "Duolingo for Schools 2.0",
-  "short_name": "DFS 2.0",
-  "description": "Fan-made classroom app: lessons, assignments, XP tracking, and a class leaderboard. Not affiliated with Duolingo.",
-  "start_url": ".",
+  "name": "Class XP Tracker",
+  "short_name": "XP Tracker",
+  "description": "Tracks each student's real Duolingo XP and shows a weekly class leaderboard. Not affiliated with Duolingo.",
+  "start_url": "tracker.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#58cc02",
