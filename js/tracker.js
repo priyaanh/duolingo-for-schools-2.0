@@ -122,11 +122,84 @@ function setWeekGoal(v) {
 
 const LOCAL_CLASS_KEY = "dfs2-local-class";
 
+// The device can hold several classes (like the sidebar in a classroom
+// dashboard). Each class has a name and its own student entries; the flat
+// getLocalClass/saveLocalClass API below always works on the ACTIVE class, so
+// the add/weekly/teacher logic doesn't need to know about multi-class at all.
+const LOCAL_CLASSES_KEY = "dfs2-local-classes";
+
+function getClassStore() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCAL_CLASSES_KEY));
+    if (raw && raw.classes && raw.activeId && raw.classes[raw.activeId]) return raw;
+  } catch { /* fall through */ }
+  // Migrate the old single-class map (or start fresh).
+  let migrated = {};
+  try { migrated = JSON.parse(localStorage.getItem(LOCAL_CLASS_KEY)) || {}; } catch { /* fine */ }
+  return { activeId: "c1", classes: { c1: { name: null, entries: migrated } } };
+}
+function saveClassStore(store) {
+  try { localStorage.setItem(LOCAL_CLASSES_KEY, JSON.stringify(store)); } catch { /* fine */ }
+}
+
 function getLocalClass() {
-  try { return JSON.parse(localStorage.getItem(LOCAL_CLASS_KEY)) || {}; } catch { return {}; }
+  const s = getClassStore();
+  return (s.classes[s.activeId] && s.classes[s.activeId].entries) || {};
 }
 function saveLocalClass(map) {
-  try { localStorage.setItem(LOCAL_CLASS_KEY, JSON.stringify(map)); } catch { /* fine */ }
+  const s = getClassStore();
+  if (!s.classes[s.activeId]) s.classes[s.activeId] = { name: null, entries: {} };
+  s.classes[s.activeId].entries = map;
+  saveClassStore(s);
+}
+
+function activeClassName(cfg) {
+  const s = getClassStore();
+  const c = s.classes[s.activeId];
+  return (c && c.name) || (cfg && cfg.className) || "My Class";
+}
+
+function createLocalClass(name) {
+  const s = getClassStore();
+  const id = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  s.classes[id] = { name: String(name || "New class").slice(0, 40), entries: {} };
+  s.activeId = id;
+  saveClassStore(s);
+  return id;
+}
+
+function switchLocalClass(id) {
+  const s = getClassStore();
+  if (s.classes[id]) { s.activeId = id; saveClassStore(s); }
+}
+
+// Set by gateAndRender so class switches can re-render with the same data.
+let lastCfg = null;
+let lastHistory = null;
+function rerenderAll() {
+  if (lastCfg && lastHistory) render(lastCfg, lastHistory);
+  renderSideClasses(lastCfg);
+}
+
+function renderSideClasses(cfg) {
+  const holder = document.getElementById("side-classes");
+  if (!holder) return;
+  const s = getClassStore();
+  holder.innerHTML = Object.entries(s.classes)
+    .map(([id, c]) => `
+      <button class="side-item ${id === s.activeId ? "active" : ""}" data-class-id="${escT(id)}">
+        <span class="side-ico">🏫</span> <span>${escT(c.name || (cfg && cfg.className) || "My Class")}</span>
+      </button>`)
+    .join("");
+  if (typeof document.querySelectorAll === "function") {
+    document.querySelectorAll("[data-class-id]").forEach((b) =>
+      b.addEventListener("click", () => {
+        switchLocalClass(b.getAttribute("data-class-id"));
+        try { localStorage.setItem("dfs2-tab", "students"); } catch { /* fine */ }
+        rerenderAll();
+      })
+    );
+  }
 }
 
 // XP earned this week (Mon-Sun, Pacific) by a device-local entry. Each entry's
@@ -798,8 +871,6 @@ function renderShell({ className, sub = "", students = "", reports = "", setting
     <div class="tabpane" id="tab-students" ${active === "students" ? "" : "hidden"}>${students}</div>
     <div class="tabpane" id="tab-reports" ${active === "reports" ? "" : "hidden"}>${reports}</div>
     <div class="tabpane" id="tab-settings" ${active === "settings" ? "" : "hidden"}>${settings}</div>`;
-  const sideName = document.getElementById("side-class-name");
-  if (sideName) sideName.textContent = className;
   if (typeof document.querySelectorAll === "function") {
     document.querySelectorAll("[data-tabbtn]").forEach((b) =>
       b.addEventListener("click", () => gotoTab(b.getAttribute("data-tabbtn")))
@@ -872,7 +943,7 @@ function render(cfg, history) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .filter((s) => s.users && Object.keys(s.users).length);
 
-  const className = cfg.className || "My Class";
+  const className = activeClassName(cfg);
   const sub =
     `<span class="chip done" title="Every name links to the real profile; data is fetched nightly from duolingo.com">🟢 Connected to real Duolingo</span>` +
     (snaps.length
@@ -1264,6 +1335,9 @@ function renderLockScreen(cfg, history) {
 }
 
 function gateAndRender(cfg, history) {
+  lastCfg = cfg;
+  lastHistory = history;
+  renderSideClasses(cfg);
   if (cfg && cfg.classCodeHash) {
     let unlocked = false;
     try { unlocked = String(localStorage.getItem(UNLOCK_KEY)) === String(cfg.classCodeHash); } catch { /* fine */ }
@@ -1293,6 +1367,16 @@ function gateAndRender(cfg, history) {
       b.addEventListener("click", () => gotoTab(b.getAttribute("data-goto")))
     );
   }
+  const newClassBtn = document.getElementById("new-class-btn");
+  if (newClassBtn && newClassBtn.addEventListener)
+    newClassBtn.addEventListener("click", () => {
+      const name = typeof prompt === "function" ? prompt("Name for the new class (e.g. French — Period 2):") : null;
+      if (name === null) return;
+      createLocalClass(name.trim() || "New class");
+      try { localStorage.setItem("dfs2-tab", "students"); } catch { /* fine */ }
+      rerenderAll();
+      gotoTab("students-add");
+    });
 
   const shareBtn = document.getElementById("share-btn");
   if (shareBtn && shareBtn.addEventListener) {
