@@ -34,12 +34,13 @@ https://priyaanh.github.io/duolingo-for-schools-2.0/tracker.html)
 
 ## Adding your class — no accounts needed
 
-**On the tracker page, no GitHub:** open **👩‍🏫 Teacher: add your class**, paste everyone's
-Duolingo usernames (put `teacher:` in front of the teacher, e.g. `teacher:msdiaz maria_g juanp`),
-and press **Add & get XP**. Each student's real XP is looked up live and shown in a ranked list,
-saved on that device. Great for a teacher's own screen or projecting in class. Tap **Share with
-the whole class** to also publish it to the shared tracker (below) so students see it on their own
-devices and weekly history builds up.
+**On the tracker page, no GitHub:** open **👩‍🏫 Make your class**, type the students' Duolingo
+usernames in the first box, the **teacher's username in its own box underneath**, and press
+**✅ Make my class**. Everyone's real XP is looked up live and shown ranked by this week's
+(Mon–Sun) XP, saved on that device. (A `teacher:` prefix in the students box also works.) Great
+for a teacher's own screen or projecting in class. Tap **Share with the whole class** to also
+publish it to the shared tracker (below) so students see it on their own devices and exact
+nightly history builds up.
 
 **Shared tracker (everyone sees it, with weekly history):**
 - **From the tracker page:** open **➕ Add to the shared tracker** → paste all the usernames

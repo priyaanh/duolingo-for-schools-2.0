@@ -216,18 +216,20 @@ function localClassBoardHtml() {
 function localClassPanelHtml() {
   const has = Object.keys(getLocalClass()).length > 0;
   return `
-    <details class="card collapser" id="local-class" ${has ? "open" : ""} style="margin-bottom:20px;border-color:var(--green);">
-      <summary>👩‍🏫 Teacher: add your class — no GitHub, no accounts</summary>
+    <details class="card collapser" id="local-class" open style="margin-bottom:20px;border-color:var(--green);">
+      <summary>👩‍🏫 ${has ? "Your class" : "Make your class"} — no GitHub, no accounts</summary>
       <p class="muted" style="font-weight:700;font-size:14px;margin-top:10px;">
-        Paste your students' Duolingo usernames. Their <strong>real</strong> XP is looked up and shown right
-        here, saved on this device — perfect for your own screen or projecting in class.
-        To add the teacher, put <strong>teacher:</strong> in front of their name
-        (e.g. <code>teacher:msdiaz</code>) — or tap <strong>🍎 Make teacher</strong> on any row later.
-        Teachers get a badge and sit out of the student ranking.
+        Type your students' Duolingo usernames, put the teacher's username in its own box, and press
+        the button — everyone's <strong>real</strong> XP comes up, ranked by this week
+        (Monday–Sunday). Saved on this device. Teachers get a 🍎 badge and sit out of the ranking;
+        you can also switch anyone later with the 🍎/🎒 buttons on their row.
       </p>
       <div class="form-row">
-        <input id="local-add-input" placeholder="e.g. maria_g juanp alex.duo" style="flex:1;min-width:230px;" autocomplete="off" />
-        <button class="btn small" id="local-add-btn">Add &amp; get XP</button>
+        <input id="local-add-input" placeholder="Students' Duolingo usernames — e.g. maria_g juanp alex.duo" style="flex:1;min-width:240px;" autocomplete="off" />
+      </div>
+      <div class="form-row">
+        <input id="local-teacher-input" placeholder="🍎 Teacher's Duolingo username (optional)" style="min-width:240px;" autocomplete="off" />
+        <button class="btn small" id="local-add-btn">${has ? "➕ Add to my class" : "✅ Make my class"}</button>
       </div>
       <div id="local-add-status"></div>
       <div id="local-class-board" style="margin-top:12px;">${localClassBoardHtml()}</div>
@@ -322,14 +324,26 @@ function bindLocalClass() {
 
   const addNames = async () => {
     const status = document.getElementById("local-add-status");
-    // A "teacher:" prefix (e.g. "teacher:msdiaz") marks that person as the teacher.
+    const teacherInput = document.getElementById("local-teacher-input");
+    // Students from the main box (a "teacher:" prefix still works there), plus
+    // the dedicated teacher box underneath.
     const tokens = Array.from(new Set(String(input.value || "").split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)));
     const parsed = tokens.map((t) => ({
       isTeacher: /^teacher:/i.test(t),
       username: t.replace(/^teacher:/i, "").replace(/^@/, "")
     }));
-    const valid = parsed.filter((p) => USERNAME_RE.test(p.username));
-    const skipped = parsed.length - valid.length;
+    const teacherName = String((teacherInput && teacherInput.value) || "").trim().replace(/^teacher:/i, "").replace(/^@/, "");
+    if (teacherName) parsed.push({ isTeacher: true, username: teacherName });
+    // De-dupe by username; the teacher flag wins if a name appears in both boxes.
+    const byName = new Map();
+    for (const p of parsed) {
+      const k = p.username.toLowerCase();
+      const prev = byName.get(k);
+      byName.set(k, { username: prev ? prev.username : p.username, isTeacher: (prev && prev.isTeacher) || p.isTeacher });
+    }
+    const all = [...byName.values()];
+    const valid = all.filter((p) => USERNAME_RE.test(p.username));
+    const skipped = all.length - valid.length;
     if (!valid.length) {
       if (status) status.innerHTML = `<p style="color:var(--red);font-weight:800;">Enter at least one valid Duolingo username.</p>`;
       return;
@@ -342,6 +356,7 @@ function bindLocalClass() {
     });
     saveLocalClass(map);
     input.value = "";
+    if (teacherInput) teacherInput.value = "";
     refreshLocalPanel(); // show pending rows immediately
     const { ok, fail } = await fetchLocalXp(valid.map((p) => p.username), document.getElementById("local-add-status"));
     refreshLocalPanel();
@@ -353,6 +368,8 @@ function bindLocalClass() {
 
   addBtn.addEventListener("click", addNames);
   if (input.addEventListener) input.addEventListener("keydown", (e) => { if (e.key === "Enter") addNames(); });
+  const teacherIn = document.getElementById("local-teacher-input");
+  if (teacherIn && teacherIn.addEventListener) teacherIn.addEventListener("keydown", (e) => { if (e.key === "Enter") addNames(); });
 
   const refreshBtn = document.getElementById("local-refresh");
   if (refreshBtn && refreshBtn.addEventListener)
