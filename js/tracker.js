@@ -573,6 +573,20 @@ const shortDay = (dateStr) => {
 // Class XP earned per day (sum of per-student gains between consecutive
 // snapshots), last 14 days, as a single-series bar chart. The weekly history
 // table below is the accessible table view of the same data.
+// Tiny inline trend line of a student's weekly XP, scaled to a shared max so
+// heights are comparable across students.
+function sparkline(values, max) {
+  const W = 82, H = 22, pad = 3;
+  if (!values.length) return "";
+  const n = values.length;
+  const x = (i) => (n === 1 ? W / 2 : pad + (i / (n - 1)) * (W - 2 * pad));
+  const y = (v) => H - pad - (max > 0 ? v / max : 0) * (H - 2 * pad);
+  const open = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;" role="img" aria-label="weekly XP trend">`;
+  if (n === 1) return `${open}<circle cx="${x(0).toFixed(1)}" cy="${y(values[0]).toFixed(1)}" r="3" fill="var(--chart-bar)"/></svg>`;
+  const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return `${open}<polyline points="${pts}" fill="none" stroke="var(--chart-bar)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(n - 1).toFixed(1)}" cy="${y(values[n - 1]).toFixed(1)}" r="2.5" fill="var(--chart-bar)"/></svg>`;
+}
+
 function dailyChartHtml(snaps) {
   if (snaps.length < 2) return "";
   const days = [];
@@ -741,6 +755,9 @@ function render(cfg, history) {
   // re-showing the week that just closed.
   const thisWeek = weekStart(todayLocal());
   const lastWeek = addDays(thisWeek, -7);
+  const historyWeeks = weeks.slice(-8);
+  const sparkMax = Math.max(1, ...allUsers.flatMap((u) => historyWeeks.map((w) => weeklyGain(u, w) || 0)));
+  const sparkOf = (u) => sparkline(historyWeeks.map((w) => weeklyGain(u, w) || 0), sparkMax);
 
   const prevSnap = snaps.length > 1 ? snaps[snaps.length - 2] : null;
 
@@ -841,17 +858,19 @@ function render(cfg, history) {
 
   const leaderboard = rows
     .map((r, i) => {
+      const search = `${(r.name || "").toLowerCase()} ${r.username.toLowerCase()}`;
       if (!r.tracked)
-        return `<tr><td>❓ <strong>${escT(r.username)}</strong></td><td colspan="4" class="muted">not found yet — check the username spelling and that the profile isn't private</td></tr>`;
+        return `<tr data-search="${escT(search)}"><td>❓ <strong>${escT(r.username)}</strong></td><td colspan="5" class="muted">not found yet — check the username spelling and that the profile isn't private</td></tr>`;
       const medal = r.isTeacher ? "" : i === 0 && (r.thisWeek || 0) > 0 ? "🥇" : i === 1 && (r.thisWeek || 0) > 0 ? "🥈" : i === 2 && (r.thisWeek || 0) > 0 ? "🥉" : "";
       const mine = isMine(r.username) ? "⭐ " : "";
       return `
-        <tr class="${!r.isTeacher && r.thisWeek === bestThisWeek && bestThisWeek > 0 ? "best" : ""}">
+        <tr data-search="${escT(search)}" class="${!r.isTeacher && r.thisWeek === bestThisWeek && bestThisWeek > 0 ? "best" : ""}">
           <td>${medal} ${mine}<strong>${profileLink(r.username, escT(r.name))}</strong> <span class="muted">@${escT(r.username)}</span>${r.isTeacher ? ' <span class="chip done">🍎 Teacher</span>' : ""}</td>
           <td class="${(r.thisWeek || 0) > 0 ? "cell-good" : "cell-warn"}">${r.thisWeek === null ? "—" : "⚡ " + fmt(r.thisWeek)}</td>
           <td>${r.lastWeek === null ? "—" : "⚡ " + fmt(r.lastWeek)}</td>
           <td>${fmt(r.totalXp)}</td>
           <td>🔥 ${fmt(r.streak)}${r.lostStreak ? ` <span title="Lost a ${fmt(r.lostStreak)}-day streak — time to restart!">💔</span>` : ""}</td>
+          <td>${sparkOf(r.username)}</td>
         </tr>`;
     })
     .join("");
@@ -885,18 +904,18 @@ function render(cfg, history) {
        <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">${winnerCards}</div>`
     : "";
 
-  const historyWeeks = weeks.slice(-8);
   const historyHead = historyWeeks.map((w) => `<th>${escT(weekLabel(w))}</th>`).join("");
   const historyRows = allUsers
     .map((u) => {
       const info = latest.users[u];
+      const search = `${(info ? info.name : u).toLowerCase()} ${u.toLowerCase()}`;
       const cells = historyWeeks
         .map((w) => {
           const g = weeklyGain(u, w);
           return `<td class="${g ? "cell-good" : "cell-warn"}">${g === null ? "—" : fmt(g)}</td>`;
         })
         .join("");
-      return `<tr><td><strong>${profileLink(u, escT(info ? info.name : u))}</strong></td>${cells}</tr>`;
+      return `<tr data-search="${escT(search)}"><td><strong>${profileLink(u, escT(info ? info.name : u))}</strong></td>${cells}</tr>`;
     })
     .join("");
   const historyTotals = historyWeeks
@@ -960,10 +979,14 @@ function render(cfg, history) {
 
     <details class="card collapser" style="margin-top:4px;">
       <summary>📋 Full stats & weekly history</summary>
-      <p style="margin:10px 0 4px;"><button class="btn ghost small" id="export-csv">⬇️ Download CSV (for your gradebook)</button></p>
+      <div class="form-row" style="margin:10px 0 4px;">
+        <input id="stats-search" placeholder="🔍 Search a student by name or username" style="flex:1;min-width:220px;" autocomplete="off" />
+        <button class="btn ghost small" id="export-csv">⬇️ Download CSV (for your gradebook)</button>
+      </div>
+      <p id="search-empty" class="muted" style="font-size:13px;font-weight:700;" hidden>No student matches that search.</p>
       <h2 class="section-title">📋 Weekly details</h2>
       <div class="table-wrap"><table>
-        <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th></tr></thead>
+        <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th><th>Trend</th></tr></thead>
         <tbody id="leaderboard-body">${leaderboard}</tbody>
       </table></div>
 
@@ -982,6 +1005,20 @@ function render(cfg, history) {
   mountLeaderboard("week");
   const exportBtn = document.getElementById("export-csv");
   if (exportBtn && exportBtn.addEventListener) exportBtn.addEventListener("click", () => downloadCsv(csvName, csvText));
+
+  const searchInput = document.getElementById("stats-search");
+  if (searchInput && searchInput.addEventListener && typeof document.querySelectorAll === "function")
+    searchInput.addEventListener("input", () => {
+      const q = String(searchInput.value || "").toLowerCase().trim();
+      let shown = 0;
+      document.querySelectorAll("[data-search]").forEach((row) => {
+        const hit = !q || (row.getAttribute("data-search") || "").includes(q);
+        row.hidden = !hit;
+        if (hit) shown++;
+      });
+      const empty = document.getElementById("search-empty");
+      if (empty) empty.hidden = !(q && shown === 0);
+    });
   const goalBtn = document.getElementById("edit-goal");
   if (goalBtn && goalBtn.addEventListener)
     goalBtn.addEventListener("click", () => {
