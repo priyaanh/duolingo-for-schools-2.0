@@ -99,10 +99,13 @@ XP is recorded immediately. The tracker page updates within a minute or two.
 
 Students can also preview their XP anytime with the **Show my XP** box on the tracker page.
 
-**Teachers on the tracker:** add the teacher's Duolingo username to `usernames` as usual, and
-also list it under `"teachers"` in [data/usernames.json](data/usernames.json). Teacher profiles
-get a 🍎 Teacher badge, sit below the student leaderboard instead of competing on it, and are
-excluded from the class XP totals.
+**Teachers on the tracker** get a 🍎 badge, sit out of the student leaderboard, and are excluded
+from class XP totals. Three ways to mark one:
+- **Paste box (device-local or shared):** prefix the name with `teacher:` — e.g.
+  `teacher:msdiaz maria_g juanp`. The device list marks them instantly; the shared paste box
+  sends it to the join robot, which adds them to `"teachers"` automatically.
+- **Per-row toggle:** in the device-local class, tap **🍎 Make teacher** / **🎒 Make student**.
+- **By hand:** list the username under `"teachers"` in [data/usernames.json](data/usernames.json).
 
 ### Optional: self-serve joining (needs a GitHub account)
 

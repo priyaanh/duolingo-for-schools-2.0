@@ -344,12 +344,13 @@ function joinBoxHtml(forceOpen = false) {
       <hr style="border:none;border-top:2px solid var(--line);margin:14px 0;" />
       <p style="font-weight:800;font-size:14px;">👩‍🏫 Adding the whole class at once?</p>
       <div class="form-row">
-        <input id="join-bulk" placeholder="Paste everyone's usernames, e.g. maria_g juanp alex.duo" style="flex:1;min-width:230px;" />
+        <input id="join-bulk" placeholder="e.g. teacher:msdiaz maria_g juanp alex.duo" style="flex:1;min-width:230px;" />
         <button class="btn small" id="join-bulk-btn">Add the whole class</button>
       </div>
       <p style="font-weight:700;color:var(--ink-soft);font-size:12px;">
         Opens one prefilled GitHub request with every name — the robot checks each one against
-        Duolingo and replies with a per-name report.
+        Duolingo and replies with a per-name report. Put <strong>teacher:</strong> in front of the
+        teacher's name (e.g. <code>teacher:msdiaz</code>) to add them as the teacher.
       </p>
     </details>`;
 }
@@ -428,21 +429,23 @@ function bindJoinBox(trackedLower) {
   const bulkInput = document.getElementById("join-bulk");
   if (bulkBtn && bulkBtn.addEventListener && bulkInput) {
     const submitBulk = () => {
-      const names = Array.from(
-        new Set(String(bulkInput.value || "").split(/[\s,;]+/).map((s) => s.trim().replace(/^@/, "")).filter(Boolean))
-      );
-      const valid = names.filter((n) => USERNAME_RE.test(n));
+      // A "teacher:" prefix is kept on the token so the robot marks that person a teacher.
+      const tokens = Array.from(new Set(String(bulkInput.value || "").split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)));
+      const parsed = tokens.map((t) => ({ isTeacher: /^teacher:/i.test(t), username: t.replace(/^teacher:/i, "").replace(/^@/, "") }));
+      const valid = parsed.filter((p) => USERNAME_RE.test(p.username));
       if (!valid.length) {
         setJoinResult(`<p style="color:var(--red);font-weight:800;">Paste at least one valid Duolingo username (separated by spaces or commas).</p>`);
         return;
       }
-      const skipped = names.length - valid.length;
-      window.open(issueUrl(valid.join(" ")), "_blank");
-      valid.forEach(rememberUsername);
-      startWatch(valid[0]);
+      const skipped = tokens.length - valid.length;
+      const title = valid.map((p) => (p.isTeacher ? `teacher:${p.username}` : p.username)).join(" ");
+      window.open(issueUrl(title), "_blank");
+      valid.forEach((p) => rememberUsername(p.username));
+      startWatch(valid[0].username);
+      const teacherCount = valid.filter((p) => p.isTeacher).length;
       setJoinResult(`
         <p style="font-weight:800;color:var(--blue-dark);">
-          ⏳ Submitting ${valid.length} username${valid.length === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped as invalid)` : ""} —
+          ⏳ Submitting ${valid.length} username${valid.length === 1 ? "" : "s"}${teacherCount ? ` (${teacherCount} as teacher)` : ""}${skipped ? ` (${skipped} skipped as invalid)` : ""} —
           press <strong>Submit new issue</strong> on the GitHub page that just opened, and this page
           will refresh itself when the robot finishes.
         </p>`);
