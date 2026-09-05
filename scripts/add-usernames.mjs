@@ -10,7 +10,15 @@ const CONFIG_PATH = "data/usernames.json";
 const MAX_USERS = 100;
 const USERNAME_RE = /^[A-Za-z0-9._-]{2,30}$/;
 
+// Same hash as js/tracker.js — a classroom lock, not real security.
+const codeHash = (s) => {
+  let h = 5381;
+  for (const c of String(s)) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  return h;
+};
+
 const raw = process.env.USERNAMES || process.argv.slice(2).join(" ");
+const classCode = (process.env.CLASS_CODE || "").trim();
 const names = Array.from(
   new Set(
     raw
@@ -21,8 +29,8 @@ const names = Array.from(
   )
 );
 
-if (!names.length) {
-  console.error("No usernames given. Pass them as arguments or in $USERNAMES.");
+if (!names.length && !classCode) {
+  console.error("Nothing to do: pass usernames (arguments or $USERNAMES) and/or a class code ($CLASS_CODE).");
   process.exit(1);
 }
 
@@ -67,7 +75,22 @@ for (const name of names) {
   await new Promise((r) => setTimeout(r, 1200)); // be polite between requests
 }
 
-if (added) await writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+// Optional class code: sets (or removes, with "off") the code students must
+// type before the tracker page shows the board.
+let codeChanged = 0;
+if (classCode) {
+  const norm = classCode.toUpperCase();
+  if (["OFF", "NONE", "REMOVE"].includes(norm)) {
+    if (cfg.classCodeHash) { cfg.classCodeHash = null; codeChanged = 1; results.push("🔓 **class code** — removed (the board is open to anyone with the link)"); }
+    else results.push("ℹ️ **class code** — none was set");
+  } else {
+    cfg.classCodeHash = codeHash(norm);
+    codeChanged = 1;
+    results.push(`🔒 **class code** — set to \`${norm}\` (students type it once per device)`);
+  }
+}
+
+if (added || codeChanged) await writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
 
 const report = results.map((r) => `- ${r}`).join("\n");
 console.log(report.replace(/\*\*/g, ""));
@@ -80,5 +103,5 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   );
 }
 if (process.env.GITHUB_OUTPUT) {
-  await appendFile(process.env.GITHUB_OUTPUT, `added=${added}\n`);
+  await appendFile(process.env.GITHUB_OUTPUT, `added=${added + codeChanged}\n`);
 }

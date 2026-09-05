@@ -55,6 +55,19 @@ Mark teachers three ways: the `teacher:` prefix when pasting, the per-row **🍎
 toggle in the device list, or by hand under `"teachers"` in
 [data/usernames.json](data/usernames.json).
 
+## Class code (students unlock the board)
+
+When a class code is set, opening the tracker shows a **🔒 Enter your class code** screen:
+students type the code the teacher gave them (once per device) and the weekly Monday–Sunday
+XP board unlocks — with an optional "your username" field that puts a ⭐ on their own row.
+
+- **Set or change the code:** Actions → **Add students** → Run workflow → fill the
+  **class_code** field (usernames may be left empty). Enter `off` to remove the code.
+- Changing the code automatically re-locks every device.
+- This is a classroom-level lock on a public static site (the data files remain publicly
+  readable in the repo) — it keeps strangers from stumbling onto the board, not a security
+  system.
+
 ## Setup (one time)
 
 1. Enable **GitHub Pages** (Settings → Pages → deploy from the `main` branch, root folder).

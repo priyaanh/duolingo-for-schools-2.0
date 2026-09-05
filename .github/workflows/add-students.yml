@@ -4,8 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       usernames:
-        description: "Duolingo usernames to add — separate with spaces or commas"
-        required: true
+        description: "Duolingo usernames to add — separate with spaces or commas (may be empty when only setting a class code)"
+        required: false
+        default: ""
+        type: string
+      class_code:
+        description: "Optional: set the class code students must type to open the board ('off' removes it)"
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -29,6 +35,7 @@ jobs:
         run: node scripts/add-usernames.mjs
         env:
           USERNAMES: ${{ inputs.usernames }}
+          CLASS_CODE: ${{ inputs.class_code }}
 
       - name: Take fresh snapshot
         if: steps.add.outputs.added != '0'

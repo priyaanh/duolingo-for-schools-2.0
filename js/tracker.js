@@ -12,7 +12,16 @@
 const REPO = "priyaanh/duolingo-for-schools-2.0";
 const MY_KEY = "dfs2-my-usernames";
 const WATCH_KEY = "dfs2-watch-username";
+const UNLOCK_KEY = "dfs2-class-unlock";
 const USERNAME_RE = /^[A-Za-z0-9._-]{2,30}$/;
+
+// Classroom-level lock, not real security: hashes the class code so the plain
+// code isn't sitting in the public config file. Must match scripts/add-usernames.mjs.
+const codeHash = (s) => {
+  let h = 5381;
+  for (const c of String(s)) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  return h;
+};
 
 const escT = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1091,6 +1100,55 @@ function render(cfg, history) {
   renderLiveRows(trackedLower);
 }
 
+/* -------------------- class-code gate -------------------- */
+
+// If the config carries a classCodeHash, students must type the class code
+// once per device before the board shows. Client-side classroom lock only.
+function renderLockScreen(cfg, history) {
+  const root = document.getElementById("tracker-root");
+  root.innerHTML = `
+    <div style="max-width:480px;margin:48px auto;text-align:center;padding:0 16px;">
+      <div style="font-size:56px;">🔒</div>
+      <h1 style="font-size:26px;font-weight:900;margin:10px 0 6px;">Enter your class code</h1>
+      <p class="muted" style="font-weight:700;">Type the code your teacher gave you to see your class's weekly XP board.</p>
+      <div class="form-row" style="justify-content:center;margin-top:16px;">
+        <input id="gate-code" placeholder="Class code" maxlength="12" style="text-transform:uppercase;width:160px;text-align:center;font-weight:800;" autocomplete="off" />
+      </div>
+      <div class="form-row" style="justify-content:center;">
+        <input id="gate-user" placeholder="Your Duolingo username (optional — ⭐ your row)" maxlength="30" style="width:300px;" autocomplete="off" />
+      </div>
+      <p id="gate-error" style="color:var(--red);font-weight:800;"></p>
+      <button class="btn" id="gate-btn">Open my class</button>
+    </div>`;
+  const btn = document.getElementById("gate-btn");
+  const codeIn = document.getElementById("gate-code");
+  const userIn = document.getElementById("gate-user");
+  if (!btn || !btn.addEventListener || !codeIn) return;
+  const submit = () => {
+    const err = document.getElementById("gate-error");
+    const code = String(codeIn.value || "").trim().toUpperCase();
+    if (!code) { if (err) err.textContent = "Type the class code your teacher gave you."; return; }
+    if (codeHash(code) !== cfg.classCodeHash) { if (err) err.textContent = "That code doesn't match — double-check with your teacher."; return; }
+    try { localStorage.setItem(UNLOCK_KEY, String(cfg.classCodeHash)); } catch { /* fine */ }
+    const u = String((userIn && userIn.value) || "").trim().replace(/^@/, "");
+    if (USERNAME_RE.test(u)) rememberUsername(u);
+    render(cfg, history);
+  };
+  btn.addEventListener("click", submit);
+  [codeIn, userIn].forEach((el) => {
+    if (el && el.addEventListener) el.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+  });
+}
+
+function gateAndRender(cfg, history) {
+  if (cfg && cfg.classCodeHash) {
+    let unlocked = false;
+    try { unlocked = String(localStorage.getItem(UNLOCK_KEY)) === String(cfg.classCodeHash); } catch { /* fine */ }
+    if (!unlocked) return renderLockScreen(cfg, history);
+  }
+  render(cfg, history);
+}
+
 (async () => {
   // When printing, open the collapsed sections so the tables land on paper,
   // then restore them afterwards.
@@ -1122,7 +1180,7 @@ function render(cfg, history) {
   const root = document.getElementById("tracker-root");
   try {
     const [cfg, history] = await Promise.all([loadJson("data/usernames.json"), loadJson("data/xp-history.json")]);
-    render(cfg, history);
+    gateAndRender(cfg, history);
   } catch (err) {
     root.innerHTML = `<div class="page-head"><h1>📈 Class XP Tracker</h1></div>` +
       setupHelp(`Couldn't load tracker data (${err.message}). If you're opening this file directly from disk, serve it instead (python3 -m http.server) or use the GitHub Pages link.`);
