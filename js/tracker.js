@@ -69,6 +69,166 @@ function rememberUsername(u) {
 }
 const isMine = (u) => getMyUsernames().some((x) => x.toLowerCase() === String(u).toLowerCase());
 
+/* -------------------- device-local class (no GitHub, no accounts) -------------------- */
+
+const LOCAL_CLASS_KEY = "dfs2-local-class";
+
+function getLocalClass() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_CLASS_KEY)) || {}; } catch { return {}; }
+}
+function saveLocalClass(map) {
+  try { localStorage.setItem(LOCAL_CLASS_KEY, JSON.stringify(map)); } catch { /* fine */ }
+}
+
+function localClassBoardHtml() {
+  const entries = Object.values(getLocalClass());
+  if (!entries.length) return "";
+  const withXp = entries.filter((e) => typeof e.totalXp === "number").sort((a, b) => b.totalXp - a.totalXp);
+  const pending = entries.filter((e) => typeof e.totalXp !== "number");
+  const rows = withXp
+    .map(
+      (e, i) => `
+      <div class="lb-row">
+        <span class="rank">${["🥇", "🥈", "🥉"][i] || i + 1}</span>
+        <span class="nm">${profileLink(e.username, escT(e.name || e.username))} <span class="muted">@${escT(e.username)}</span></span>
+        <span class="val">⚡ ${fmt(e.totalXp)}</span>
+        <span style="font-weight:800;">🔥 ${fmt(e.streak || 0)}</span>
+        <button class="linkish" data-local-remove="${escT(e.username.toLowerCase())}" title="Remove ${escT(e.username)}">✕</button>
+      </div>`
+    )
+    .join("");
+  const pendingRows = pending
+    .map(
+      (e) => `
+      <div class="lb-row">
+        <span class="rank">…</span>
+        <span class="nm">${escT(e.username)} <span class="muted">looking up XP…</span></span>
+        <span class="val">—</span><span></span>
+        <button class="linkish" data-local-remove="${escT(e.username.toLowerCase())}" title="Remove">✕</button>
+      </div>`
+    )
+    .join("");
+  return `<div class="lb-list">${rows}${pendingRows}</div>`;
+}
+
+function localClassPanelHtml() {
+  const has = Object.keys(getLocalClass()).length > 0;
+  return `
+    <details class="card collapser" id="local-class" ${has ? "open" : ""} style="margin-bottom:20px;border-color:var(--green);">
+      <summary>👩‍🏫 Teacher: add your class — no GitHub, no accounts</summary>
+      <p class="muted" style="font-weight:700;font-size:14px;margin-top:10px;">
+        Paste your students' Duolingo usernames. Their <strong>real</strong> XP is looked up and shown right
+        here, saved on this device — perfect for your own screen or projecting in class.
+      </p>
+      <div class="form-row">
+        <input id="local-add-input" placeholder="e.g. maria_g juanp alex.duo" style="flex:1;min-width:230px;" autocomplete="off" />
+        <button class="btn small" id="local-add-btn">Add &amp; get XP</button>
+      </div>
+      <div id="local-add-status"></div>
+      <div id="local-class-board" style="margin-top:12px;">${localClassBoardHtml()}</div>
+      ${has
+        ? `<div class="form-row" style="margin-top:12px;">
+             <button class="btn ghost small" id="local-refresh">🔄 Refresh XP</button>
+             <button class="btn ghost small" id="local-share">📢 Share with the whole class</button>
+             <button class="linkish" id="local-clear">Clear this device's list</button>
+           </div>
+           <p class="muted" style="font-size:12px;font-weight:700;">
+             Saved on <strong>this device only</strong>. To let students see it too (and build weekly history),
+             tap <strong>Share with the whole class</strong> — that adds them to the shared tracker (needs GitHub once).
+           </p>`
+        : ""}
+    </details>`;
+}
+
+async function fetchLocalXp(names, statusEl) {
+  const valid = names.filter((n) => USERNAME_RE.test(n));
+  let ok = 0, fail = 0;
+  for (let i = 0; i < valid.length; i++) {
+    const n = valid[i];
+    if (statusEl) statusEl.innerHTML = `<p class="muted" style="font-weight:700;">Looking up @${escT(n)} (${i + 1} of ${valid.length})…</p>`;
+    try {
+      const info = await fetchProfile(n);
+      const m = getLocalClass();
+      m[n.toLowerCase()] = { username: info.username || n, name: info.name || n, totalXp: info.totalXp ?? 0, streak: info.streak ?? 0, ts: Date.now() };
+      saveLocalClass(m);
+      ok++;
+    } catch (e) {
+      fail++;
+    }
+  }
+  return { ok, fail };
+}
+
+function refreshLocalPanel() {
+  const el = document.getElementById("local-class");
+  if (el) el.outerHTML = localClassPanelHtml();
+  bindLocalClass();
+}
+
+function bindLocalClass() {
+  const addBtn = document.getElementById("local-add-btn");
+  const input = document.getElementById("local-add-input");
+  if (!addBtn || !addBtn.addEventListener || !input) return;
+
+  if (typeof document.querySelectorAll === "function") {
+    document.querySelectorAll("[data-local-remove]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const map = getLocalClass();
+        delete map[el.getAttribute("data-local-remove")];
+        saveLocalClass(map);
+        refreshLocalPanel();
+      })
+    );
+  }
+
+  const addNames = async () => {
+    const status = document.getElementById("local-add-status");
+    const names = Array.from(new Set(String(input.value || "").split(/[\s,;]+/).map((s) => s.trim().replace(/^@/, "")).filter(Boolean)));
+    const valid = names.filter((n) => USERNAME_RE.test(n));
+    const skipped = names.length - valid.length;
+    if (!valid.length) {
+      if (status) status.innerHTML = `<p style="color:var(--red);font-weight:800;">Enter at least one valid Duolingo username.</p>`;
+      return;
+    }
+    const map = getLocalClass();
+    valid.forEach((n) => { if (!map[n.toLowerCase()]) map[n.toLowerCase()] = { username: n }; });
+    saveLocalClass(map);
+    input.value = "";
+    refreshLocalPanel(); // show pending rows immediately
+    const { ok, fail } = await fetchLocalXp(valid, document.getElementById("local-add-status"));
+    refreshLocalPanel();
+    const s = document.getElementById("local-add-status");
+    if (s)
+      s.innerHTML = `<p style="font-weight:800;color:${ok ? "var(--green-dark)" : "var(--red)"};">Added ${ok} student${ok === 1 ? "" : "s"}${fail ? `, ${fail} couldn't be looked up right now (tap 🔄 Refresh XP to retry)` : ""}${skipped ? `, ${skipped} skipped as invalid` : ""}.</p>`;
+  };
+
+  addBtn.addEventListener("click", addNames);
+  if (input.addEventListener) input.addEventListener("keydown", (e) => { if (e.key === "Enter") addNames(); });
+
+  const refreshBtn = document.getElementById("local-refresh");
+  if (refreshBtn && refreshBtn.addEventListener)
+    refreshBtn.addEventListener("click", async () => {
+      const names = Object.values(getLocalClass()).map((e) => e.username);
+      await fetchLocalXp(names, document.getElementById("local-add-status"));
+      refreshLocalPanel();
+    });
+
+  const shareBtn = document.getElementById("local-share");
+  if (shareBtn && shareBtn.addEventListener)
+    shareBtn.addEventListener("click", () => {
+      const names = Object.values(getLocalClass()).map((e) => e.username);
+      if (names.length) window.open(issueUrl(names.join(" ")), "_blank");
+    });
+
+  const clearBtn = document.getElementById("local-clear");
+  if (clearBtn && clearBtn.addEventListener)
+    clearBtn.addEventListener("click", () => {
+      if (typeof confirm === "function" && !confirm("Clear the class list saved on this device?")) return;
+      saveLocalClass({});
+      refreshLocalPanel();
+    });
+}
+
 /* -------------------- live profile lookup (best-effort) -------------------- */
 
 const duoApiUrl = (u) =>
@@ -439,8 +599,9 @@ function render(cfg, history) {
     const reason = usernames.length
       ? `${usernames.length} username${usernames.length === 1 ? " is" : "s are"} configured, but no snapshots have been recorded yet.`
       : "No Duolingo usernames are configured yet, so there is nothing to track.";
-    root.innerHTML = head + joinBoxHtml(true) + setupHelp(reason) + faqHtml();
+    root.innerHTML = head + localClassPanelHtml() + joinBoxHtml(true) + setupHelp(reason) + faqHtml();
     const emptySet = new Set(usernames.map((u) => u.toLowerCase()));
+    bindLocalClass();
     bindJoinBox(emptySet);
     resumeWatchIfPending(emptySet);
     return;
@@ -666,6 +827,8 @@ function render(cfg, history) {
 
     ${hallOfFame}
 
+    ${localClassPanelHtml()}
+
     ${joinBoxHtml()}
 
     <details class="card collapser" style="margin-top:4px;">
@@ -689,6 +852,7 @@ function render(cfg, history) {
     ${faqHtml()}`;
 
   mountLeaderboard("week");
+  bindLocalClass();
   bindJoinBox(trackedLower);
   resumeWatchIfPending(trackedLower);
   renderLiveRows(trackedLower);

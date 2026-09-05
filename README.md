@@ -78,8 +78,15 @@ teacher can keep seeing how much XP each student earns per week on the *real* Du
 
 ### Adding the class (no student accounts needed)
 
-Classmates don't need GitHub — they just tell whoever runs the tracker their Duolingo username.
-Then add everyone in one paste, either way:
+**No GitHub at all — teacher's own screen:** on the tracker page open **👩‍🏫 Teacher: add your
+class**, paste everyone's Duolingo usernames, and press **Add & get XP**. Each student's real XP
+is looked up live and shown in a ranked list, saved on that device — no account, no GitHub. Great
+for a teacher checking on their laptop or projecting in class. (It lives in that browser and has no
+weekly history; tap **Share with the whole class** to also push it to the shared tracker below.)
+
+**Shared tracker (everyone sees it, with weekly history):** classmates don't need GitHub — they
+just tell whoever runs the tracker their Duolingo username. Then add everyone in one paste,
+either way:
 
 - **From the tracker page:** open **➕ Add yourself** → paste all the usernames into the
   **Adding the whole class?** box → it opens one prefilled GitHub request (`join: name1 name2 …`)
