@@ -96,6 +96,19 @@ function rememberUsername(u) {
 }
 const isMine = (u) => getMyUsernames().some((x) => x.toLowerCase() === String(u).toLowerCase());
 
+/* -------------------- weekly class XP goal (saved on this device) -------------------- */
+
+const GOAL_KEY = "dfs2-week-goal";
+function getWeekGoal(fallback) {
+  try {
+    const v = parseInt(localStorage.getItem(GOAL_KEY), 10);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  } catch { return fallback; }
+}
+function setWeekGoal(v) {
+  try { localStorage.setItem(GOAL_KEY, String(v)); } catch { /* fine */ }
+}
+
 /* -------------------- device-local class (no GitHub, no accounts) -------------------- */
 
 const LOCAL_CLASS_KEY = "dfs2-local-class";
@@ -908,6 +921,21 @@ function render(cfg, history) {
   const csvText = toCsv([csvHeader, ...csvRows]);
   const csvName = `class-xp-${latest.date}.csv`;
 
+  // Weekly class XP goal: default is ~100 XP per tracked student, adjustable.
+  const defaultGoal = Math.max(100, ranked.length * 100);
+  const weekGoal = getWeekGoal(defaultGoal);
+  const goalPct = Math.min(100, Math.round((classThisWeek / weekGoal) * 100));
+  const goalMet = classThisWeek >= weekGoal;
+  const goalSection = `
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <strong style="font-size:16px;">${goalMet ? "🎉" : "🎯"} Class goal this week</strong>
+        <span style="font-weight:800;">⚡ ${fmt(classThisWeek)} / ${fmt(weekGoal)} XP · <button class="linkish" id="edit-goal">Edit goal</button></span>
+      </div>
+      <div class="progress-track" style="margin-top:10px;"><div class="progress-fill" style="width:${goalPct}%;${goalMet ? "background:var(--yellow);" : ""}"></div></div>
+      ${goalMet ? `<p style="color:var(--green-dark);font-weight:800;font-size:13px;margin-top:6px;">Goal reached — great week! 🔥</p>` : ""}
+    </div>`;
+
   root.innerHTML = `
     ${head}
     <div class="stat-row">
@@ -916,6 +944,8 @@ function render(cfg, history) {
       <div class="stat"><div class="num">${snaps.length}</div><div class="lbl">Daily snapshots</div></div>
       <div class="stat"><div class="num">${weeks.length}</div><div class="lbl">Weeks recorded</div></div>
     </div>
+
+    ${goalSection}
 
     <h2 class="section-title">🏆 Leaderboard</h2>
     <div id="lb-section"></div>
@@ -952,6 +982,17 @@ function render(cfg, history) {
   mountLeaderboard("week");
   const exportBtn = document.getElementById("export-csv");
   if (exportBtn && exportBtn.addEventListener) exportBtn.addEventListener("click", () => downloadCsv(csvName, csvText));
+  const goalBtn = document.getElementById("edit-goal");
+  if (goalBtn && goalBtn.addEventListener)
+    goalBtn.addEventListener("click", () => {
+      const cur = getWeekGoal(defaultGoal);
+      const next = typeof prompt === "function" ? prompt(`Weekly class XP goal (currently ${cur}):`, String(cur)) : null;
+      if (next === null) return;
+      const n = parseInt(String(next).replace(/[^0-9]/g, ""), 10);
+      if (!Number.isFinite(n) || n <= 0) { if (typeof alert === "function") alert("Enter a whole number greater than 0."); return; }
+      setWeekGoal(n);
+      if (typeof location !== "undefined" && location.reload) location.reload();
+    });
   bindLocalClass();
   bindJoinBox(trackedLower);
   resumeWatchIfPending(trackedLower);
