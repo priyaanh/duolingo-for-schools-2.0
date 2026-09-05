@@ -177,8 +177,10 @@ function switchLocalClass(id) {
 let lastCfg = null;
 let lastHistory = null;
 function rerenderAll() {
-  if (lastCfg && lastHistory) render(lastCfg, lastHistory);
-  renderSideClasses(lastCfg);
+  // Always go back through the gate: a class switch must never skip the
+  // class-code check (gateAndRender also refreshes the sidebar).
+  if (lastCfg && lastHistory) gateAndRender(lastCfg, lastHistory);
+  else renderSideClasses(lastCfg);
 }
 
 function renderSideClasses(cfg) {
@@ -670,6 +672,8 @@ function bindJoinBox(trackedLower) {
 
 /* -------------------- waiting for the join robot -------------------- */
 
+let watchTimer = null; // single poller, no matter how many times startWatch runs
+
 function startWatch(username) {
   try { localStorage.setItem(WATCH_KEY, username); } catch { /* fine */ }
   setJoinResult(`
@@ -677,6 +681,7 @@ function startWatch(username) {
       ⏳ Waiting for <strong>@${escT(username)}</strong> to be added — the robot checks in every few
       minutes, and this page refreshes itself when you land on the board.
     </p>`);
+  if (watchTimer) clearInterval(watchTimer); // never stack pollers across re-renders
   const iv = setInterval(async () => {
     try {
       const h = await loadJson("data/xp-history.json");
@@ -684,11 +689,13 @@ function startWatch(username) {
       const latest = snaps[snaps.length - 1];
       if (latest && Object.keys(latest.users || {}).some((u) => u.toLowerCase() === username.toLowerCase())) {
         clearInterval(iv);
+        watchTimer = null;
         try { localStorage.removeItem(WATCH_KEY); } catch { /* fine */ }
         location.reload();
       }
     } catch { /* transient fetch problem — keep polling */ }
   }, 20000);
+  watchTimer = iv;
 }
 
 function resumeWatchIfPending(trackedLower) {
@@ -1386,13 +1393,14 @@ function joinStatusBannerHtml(trackedLower) {
   const names = pending.map((u) => `@${escT(u)}`).join(", ");
   return `
     <div class="card" style="border-color:var(--blue);background:var(--blue-pale);margin-bottom:18px;">
-      <p style="font-weight:800;">🙋 ${names} — your join request is in! The robot adds you to the board within about 15–30 minutes.</p>
+      <p style="font-weight:800;">🙋 ${names} — not on the shared board yet.</p>
       <div class="form-row" style="margin-top:10px;">
-        <button class="btn blue small" id="join-status-btn">Send my request again</button>
+        <button class="btn blue small" id="join-status-btn">Send join request</button>
       </div>
       <p class="muted" style="font-weight:700;font-size:13px;">
-        No account needed — entering the class code with your username files the request
-        automatically, and this page refreshes itself when you land on the board.
+        No account needed — the robot adds you within about 15–30 minutes, and this page refreshes
+        itself when you land on the board. Still not showing after a while? Double-check the
+        username spelling and that the Duolingo profile isn't set to private, then send again.
       </p>
     </div>`;
 }

@@ -21,9 +21,17 @@ const report = [];
 if (!cfg.joinTopic) {
   report.push("No joinTopic configured — nothing to process.");
 } else {
-  const res = await fetch(`https://ntfy.sh/${encodeURIComponent(cfg.joinTopic)}/json?poll=1&since=all`);
-  if (!res.ok) throw new Error(`inbox poll failed: HTTP ${res.status}`);
-  const text = await res.text();
+  // A transient inbox outage must not fail the scheduled run — requests stay
+  // in the inbox for ~12h, so the next run simply picks them up.
+  let text = "";
+  try {
+    const res = await fetch(`https://ntfy.sh/${encodeURIComponent(cfg.joinTopic)}/json?poll=1&since=all`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    text = await res.text();
+  } catch (err) {
+    report.push(`⚠️ Inbox unreachable right now (${err.message}) — will retry on the next run.`);
+    text = "";
+  }
 
   const wanted = new Map(); // lowercased username -> as-typed
   let wrongCode = 0;
