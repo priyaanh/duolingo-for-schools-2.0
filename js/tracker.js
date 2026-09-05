@@ -83,17 +83,26 @@ function saveLocalClass(map) {
 function localClassBoardHtml() {
   const entries = Object.values(getLocalClass());
   if (!entries.length) return "";
-  const withXp = entries.filter((e) => typeof e.totalXp === "number").sort((a, b) => b.totalXp - a.totalXp);
-  const pending = entries.filter((e) => typeof e.totalXp !== "number");
-  const rows = withXp
+  const students = entries.filter((e) => !e.isTeacher && typeof e.totalXp === "number").sort((a, b) => b.totalXp - a.totalXp);
+  const pending = entries.filter((e) => !e.isTeacher && typeof e.totalXp !== "number");
+  const teachers = entries.filter((e) => e.isTeacher);
+
+  const roleBtn = (e) =>
+    `<button class="linkish" data-local-teacher="${escT(e.username.toLowerCase())}" title="${e.isTeacher ? "Move to students" : "Mark as the teacher"}">${e.isTeacher ? "🎒 Make student" : "🍎 Make teacher"}</button>`;
+  const removeBtn = (e) =>
+    `<button class="linkish" data-local-remove="${escT(e.username.toLowerCase())}" title="Remove ${escT(e.username)}">✕</button>`;
+  const xpCell = (e) => (typeof e.totalXp === "number" ? `⚡ ${fmt(e.totalXp)}` : "—");
+  const streakCell = (e) => (typeof e.streak === "number" ? `🔥 ${fmt(e.streak)}` : "");
+
+  const studentRows = students
     .map(
       (e, i) => `
       <div class="lb-row">
         <span class="rank">${["🥇", "🥈", "🥉"][i] || i + 1}</span>
         <span class="nm">${profileLink(e.username, escT(e.name || e.username))} <span class="muted">@${escT(e.username)}</span></span>
-        <span class="val">⚡ ${fmt(e.totalXp)}</span>
-        <span style="font-weight:800;">🔥 ${fmt(e.streak || 0)}</span>
-        <button class="linkish" data-local-remove="${escT(e.username.toLowerCase())}" title="Remove ${escT(e.username)}">✕</button>
+        <span class="val">${xpCell(e)}</span>
+        <span style="font-weight:800;">${streakCell(e)}</span>
+        ${roleBtn(e)}${removeBtn(e)}
       </div>`
     )
     .join("");
@@ -104,11 +113,28 @@ function localClassBoardHtml() {
         <span class="rank">…</span>
         <span class="nm">${escT(e.username)} <span class="muted">looking up XP…</span></span>
         <span class="val">—</span><span></span>
-        <button class="linkish" data-local-remove="${escT(e.username.toLowerCase())}" title="Remove">✕</button>
+        ${roleBtn(e)}${removeBtn(e)}
       </div>`
     )
     .join("");
-  return `<div class="lb-list">${rows}${pendingRows}</div>`;
+  const teacherRows = teachers
+    .map(
+      (e) => `
+      <div class="lb-row">
+        <span class="rank">🍎</span>
+        <span class="nm">${profileLink(e.username, escT(e.name || e.username))} <span class="muted">@${escT(e.username)}</span> <span class="chip done">Teacher</span></span>
+        <span class="val">${xpCell(e)}</span>
+        <span style="font-weight:800;">${streakCell(e)}</span>
+        ${roleBtn(e)}${removeBtn(e)}
+      </div>`
+    )
+    .join("");
+
+  let html = "";
+  if (studentRows || pendingRows) html += `<div class="lb-list">${studentRows}${pendingRows}</div>`;
+  if (teacherRows)
+    html += `<p class="muted" style="font-weight:800;font-size:13px;margin:12px 0 4px;">👩‍🏫 Teachers (not ranked with students)</p><div class="lb-list">${teacherRows}</div>`;
+  return html;
 }
 
 function localClassPanelHtml() {
@@ -119,6 +145,8 @@ function localClassPanelHtml() {
       <p class="muted" style="font-weight:700;font-size:14px;margin-top:10px;">
         Paste your students' Duolingo usernames. Their <strong>real</strong> XP is looked up and shown right
         here, saved on this device — perfect for your own screen or projecting in class.
+        Tap <strong>🍎 Make teacher</strong> on any row to mark the teacher — they get a badge and sit out
+        of the student ranking.
       </p>
       <div class="form-row">
         <input id="local-add-input" placeholder="e.g. maria_g juanp alex.duo" style="flex:1;min-width:230px;" autocomplete="off" />
@@ -177,6 +205,13 @@ function bindLocalClass() {
         delete map[el.getAttribute("data-local-remove")];
         saveLocalClass(map);
         refreshLocalPanel();
+      })
+    );
+    document.querySelectorAll("[data-local-teacher]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const map = getLocalClass();
+        const key = el.getAttribute("data-local-teacher");
+        if (map[key]) { map[key].isTeacher = !map[key].isTeacher; saveLocalClass(map); refreshLocalPanel(); }
       })
     );
   }
