@@ -120,10 +120,30 @@ function saveLocalClass(map) {
   try { localStorage.setItem(LOCAL_CLASS_KEY, JSON.stringify(map)); } catch { /* fine */ }
 }
 
+// XP earned this week (Mon-Sun, Pacific) by a device-local entry. Each entry's
+// `hist` stores the FIRST reading captured on each day; the weekly baseline is
+// the newest reading from before this week (else the first one this week), so
+// numbers match the shared tracker's Monday-to-Sunday rules as sightings allow.
+function localWeekXp(e) {
+  if (typeof e.totalXp !== "number") return null;
+  const wk = weekStart(todayLocal());
+  const hist = e.hist || {};
+  const days = Object.keys(hist).sort();
+  let base = null;
+  for (const d of days) {
+    if (d < wk) base = hist[d];
+    else { if (base === null) base = hist[d]; break; }
+  }
+  if (base === null) return 0; // first-ever reading is happening right now
+  return Math.max(0, e.totalXp - base);
+}
+
 function localClassBoardHtml() {
   const entries = Object.values(getLocalClass());
   if (!entries.length) return "";
-  const students = entries.filter((e) => !e.isTeacher && typeof e.totalXp === "number").sort((a, b) => b.totalXp - a.totalXp);
+  const students = entries
+    .filter((e) => !e.isTeacher && typeof e.totalXp === "number")
+    .sort((a, b) => ((localWeekXp(b) ?? 0) - (localWeekXp(a) ?? 0)) || (b.totalXp - a.totalXp));
   const pending = entries.filter((e) => !e.isTeacher && typeof e.totalXp !== "number");
   const teachers = entries.filter((e) => e.isTeacher);
 
@@ -131,7 +151,11 @@ function localClassBoardHtml() {
     `<button class="linkish" data-local-teacher="${escT(e.username.toLowerCase())}" title="${e.isTeacher ? "Move to students" : "Mark as the teacher"}">${e.isTeacher ? "🎒 Make student" : "🍎 Make teacher"}</button>`;
   const removeBtn = (e) =>
     `<button class="linkish" data-local-remove="${escT(e.username.toLowerCase())}" title="Remove ${escT(e.username)}">✕</button>`;
-  const xpCell = (e) => (typeof e.totalXp === "number" ? `⚡ ${fmt(e.totalXp)}` : "—");
+  const xpCell = (e) => {
+    if (typeof e.totalXp !== "number") return "—";
+    const wk = localWeekXp(e);
+    return `⚡ ${fmt(wk ?? 0)} this week <span class="muted" style="font-weight:700;">(${fmt(e.totalXp)} total)</span>`;
+  };
   const streakCell = (e) => (typeof e.streak === "number" ? `🔥 ${fmt(e.streak)}` : "");
 
   const studentRows = students
@@ -171,7 +195,10 @@ function localClassBoardHtml() {
     .join("");
 
   let html = "";
-  if (studentRows || pendingRows) html += `<div class="lb-list">${studentRows}${pendingRows}</div>`;
+  if (studentRows || pendingRows) {
+    html += `<p class="muted" style="font-weight:800;font-size:13px;margin:0 0 4px;">Ranked by XP earned this week (Monday–Sunday, Pacific time)</p>`;
+    html += `<div class="lb-list">${studentRows}${pendingRows}</div>`;
+  }
   if (teacherRows)
     html += `<p class="muted" style="font-weight:800;font-size:13px;margin:12px 0 4px;">👩‍🏫 Teachers (not ranked with students)</p><div class="lb-list">${teacherRows}</div>`;
   return html;
@@ -202,8 +229,11 @@ function localClassPanelHtml() {
              <button class="linkish" id="local-clear">Clear this device's list</button>
            </div>
            <p class="muted" style="font-size:12px;font-weight:700;">
-             Saved on <strong>this device only</strong>. To let students see it too (and build weekly history),
-             tap <strong>Share with the whole class</strong> — that adds them to the shared tracker (needs GitHub once).
+             <strong>This week</strong> counts Monday–Sunday (Pacific) from each student's first reading on
+             this device — it starts at 0 when someone is added and grows as they practice. The page takes a
+             fresh reading each time it's opened. Saved on <strong>this device only</strong>; tap
+             <strong>Share with the whole class</strong> to publish to the shared tracker (needs GitHub once),
+             which records exact numbers every night automatically.
            </p>`
         : ""}
     </details>`;
@@ -218,8 +248,17 @@ async function fetchLocalXp(names, statusEl) {
     try {
       const info = await fetchProfile(n);
       const m = getLocalClass();
-      // Merge so a teacher flag set on the pending row survives the XP fetch.
-      m[n.toLowerCase()] = { ...(m[n.toLowerCase()] || {}), username: info.username || n, name: info.name || n, totalXp: info.totalXp ?? 0, streak: info.streak ?? 0, ts: Date.now() };
+      const prev = m[n.toLowerCase()] || {};
+      const xp = info.totalXp ?? 0;
+      // Keep the FIRST reading of each day as that day's baseline (so later
+      // refreshes the same day count intra-day XP instead of resetting it).
+      const day = todayLocal();
+      const hist = { ...(prev.hist || {}) };
+      if (!(day in hist)) hist[day] = xp;
+      const dayKeys = Object.keys(hist).sort();
+      while (dayKeys.length > 30) delete hist[dayKeys.shift()];
+      // Merge so teacher flags and history survive the XP fetch.
+      m[n.toLowerCase()] = { ...prev, username: info.username || n, name: info.name || n, totalXp: xp, streak: info.streak ?? 0, ts: Date.now(), hist };
       saveLocalClass(m);
       ok++;
     } catch (e) {
@@ -233,6 +272,20 @@ function refreshLocalPanel() {
   const el = document.getElementById("local-class");
   if (el) el.outerHTML = localClassPanelHtml();
   bindLocalClass();
+}
+
+// Take today's reading automatically on page load (once per day per student),
+// so the Monday-Sunday numbers stay current without pressing anything.
+let localAutoRefreshed = false;
+function autoRefreshLocalClass() {
+  if (localAutoRefreshed) return;
+  const entries = Object.values(getLocalClass());
+  if (!entries.length) return;
+  const day = todayLocal();
+  const stale = entries.filter((e) => typeof e.totalXp !== "number" || !e.hist || !(day in e.hist));
+  if (!stale.length) return;
+  localAutoRefreshed = true;
+  fetchLocalXp(stale.map((e) => e.username), null).then(() => refreshLocalPanel()).catch(() => { /* best-effort */ });
 }
 
 function bindLocalClass() {
@@ -314,6 +367,8 @@ function bindLocalClass() {
       saveLocalClass({});
       refreshLocalPanel();
     });
+
+  autoRefreshLocalClass();
 }
 
 /* -------------------- live profile lookup (best-effort) -------------------- */
