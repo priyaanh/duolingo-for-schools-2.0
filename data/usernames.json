@@ -1,8 +1,5 @@
 {
-  "_help": "Add each class member's real Duolingo username to 'usernames' (profiles must not be private). Anyone also listed under 'teachers' gets a Teacher badge on the tracker and is kept out of the student leaderboard and class totals. The Duolingo/Luis entries are demo profiles - replace them with your class.",
-  "usernames": [
-    "Duolingo",
-    "Luis"
-  ],
+  "_help": "Add each class member's real Duolingo username to 'usernames' (profiles must not be private). Anyone also listed under 'teachers' gets a Teacher badge on the tracker and is kept out of the student leaderboard and class totals.",
+  "usernames": [],
   "teachers": []
 }
