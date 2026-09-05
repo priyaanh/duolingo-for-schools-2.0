@@ -53,6 +53,33 @@ async function loadJson(path) {
   return res.json();
 }
 
+/* -------------------- CSV export (for a teacher's gradebook) -------------------- */
+
+function toCsv(rows2d) {
+  return rows2d
+    .map((r) => r.map((cell) => {
+      const s = String(cell == null ? "" : cell);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(","))
+    .join("\r\n");
+}
+
+function downloadCsv(filename, text) {
+  try {
+    const blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" }); // BOM so Excel reads accents
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    /* download blocked — nothing else to do on a static page */
+  }
+}
+
 /* -------------------- local memory of "my" usernames -------------------- */
 
 function getMyUsernames() {
@@ -863,6 +890,24 @@ function render(cfg, history) {
     .map((w) => `<td><strong>${fmt(allUsers.reduce((a, u) => a + (weeklyGain(u, w) || 0), 0))}</strong></td>`)
     .join("");
 
+  // Spreadsheet-ready export of everyone's weekly XP for a teacher's gradebook.
+  const csvHeader = ["Name", "Username", "Role", ...historyWeeks.map(weekLabel), "This week", "Last week", "Total XP", "Streak"];
+  const csvRows = allUsers.map((u) => {
+    const info = latest.users[u];
+    return [
+      info ? info.name : u,
+      u,
+      teacherSet.has(u.toLowerCase()) ? "teacher" : "student",
+      ...historyWeeks.map((w) => { const g = weeklyGain(u, w); return g == null ? "" : g; }),
+      weeklyGain(u, thisWeek) == null ? "" : weeklyGain(u, thisWeek),
+      weeklyGain(u, lastWeek) == null ? "" : weeklyGain(u, lastWeek),
+      info ? info.totalXp : "",
+      info ? info.streak : ""
+    ];
+  });
+  const csvText = toCsv([csvHeader, ...csvRows]);
+  const csvName = `class-xp-${latest.date}.csv`;
+
   root.innerHTML = `
     ${head}
     <div class="stat-row">
@@ -885,6 +930,7 @@ function render(cfg, history) {
 
     <details class="card collapser" style="margin-top:4px;">
       <summary>📋 Full stats & weekly history</summary>
+      <p style="margin:10px 0 4px;"><button class="btn ghost small" id="export-csv">⬇️ Download CSV (for your gradebook)</button></p>
       <h2 class="section-title">📋 Weekly details</h2>
       <div class="table-wrap"><table>
         <thead><tr><th>Student</th><th>This week</th><th>Last week</th><th>Total XP</th><th>Streak</th></tr></thead>
@@ -904,6 +950,8 @@ function render(cfg, history) {
     ${faqHtml()}`;
 
   mountLeaderboard("week");
+  const exportBtn = document.getElementById("export-csv");
+  if (exportBtn && exportBtn.addEventListener) exportBtn.addEventListener("click", () => downloadCsv(csvName, csvText));
   bindLocalClass();
   bindJoinBox(trackedLower);
   resumeWatchIfPending(trackedLower);

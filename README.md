@@ -72,6 +72,8 @@ teacher can keep seeing how much XP each student earns per week on the *real* Du
 - [tracker.html](tracker.html) turns those snapshots into a weekly leaderboard: XP this week,
   XP last week, weekly history per student, class totals, and streaks. **Weeks run Monday
   00:00 through Sunday 23:59, US Pacific time** — the Sunday-night snapshot closes the week.
+  A **⬇️ Download CSV** button (under *Full stats*) exports everyone's weekly XP, totals, and
+  streaks as a spreadsheet for a teacher's gradebook.
   (Different timezone? Change `TIMEZONE` in [scripts/track-xp.mjs](scripts/track-xp.mjs) and
   [js/tracker.js](js/tracker.js), and shift the cron in the workflow to just after your local
   midnight.)
