@@ -312,6 +312,19 @@ tr + tr td { border-top: 1px solid var(--line); }
 
 .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--blue); }
 
+.form-row textarea {
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--bg);
+  font-family: inherit;
+  line-height: 1.6;
+}
+.form-row textarea:focus { outline: none; border-color: var(--blue); }
+
 /* ---------- Skill tree ---------- */
 
 .skill-tree {

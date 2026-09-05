@@ -1,0 +1,41 @@
+name: Process join requests
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # empty the join inbox every ~15 minutes
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tracker-writes
+
+jobs:
+  joins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Process inbox
+        id: pj
+        run: node scripts/process-joins.mjs
+
+      - name: Take fresh snapshot
+        if: steps.pj.outputs.added != '0'
+        run: node scripts/track-xp.mjs
+
+      - name: Commit
+        if: steps.pj.outputs.added != '0'
+        env:
+          ADDED: ${{ steps.pj.outputs.added }}
+        run: |
+          git config user.name "xp-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/usernames.json data/xp-history.json
+          git diff --cached --quiet || git commit -m "Students joined with the class code: $ADDED added"
+          for i in 1 2 3; do git push && break || { git pull --rebase; sleep 3; }; done

@@ -1,4 +1,4 @@
-# 🦜 Class XP Tracker
+# 🦜 Duolingo XP Tracker
 
 A tracker that shows each student's **real Duolingo XP** on a weekly class leaderboard — built
 for teachers whose classes practice on the real Duolingo app. Plain HTML/CSS/JavaScript, hosted

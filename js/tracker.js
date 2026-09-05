@@ -298,7 +298,10 @@ function localClassPanelHtml() {
         you can also switch anyone later with the 🍎/🎒 buttons on their row.
       </p>
       <div class="form-row">
-        <input id="local-add-input" placeholder="Students' Duolingo usernames — e.g. maria_g juanp alex.duo" style="flex:1;min-width:240px;" autocomplete="off" />
+        <textarea id="local-add-input" rows="5" placeholder="One student username per line, e.g.
+maria_g
+juanp
+alex.duo" style="flex:1;min-width:240px;resize:vertical;" autocomplete="off"></textarea>
       </div>
       <div class="form-row">
         <input id="local-teacher-input" placeholder="🍎 Teacher's Duolingo username (optional)" style="min-width:240px;" autocomplete="off" />
@@ -443,7 +446,6 @@ function bindLocalClass() {
   };
 
   addBtn.addEventListener("click", addNames);
-  if (input.addEventListener) input.addEventListener("keydown", (e) => { if (e.key === "Enter") addNames(); });
   const teacherIn = document.getElementById("local-teacher-input");
   if (teacherIn && teacherIn.addEventListener) teacherIn.addEventListener("keydown", (e) => { if (e.key === "Enter") addNames(); });
 
@@ -553,7 +555,10 @@ function joinBoxHtml(forceOpen = false) {
       <hr style="border:none;border-top:2px solid var(--line);margin:14px 0;" />
       <p style="font-weight:800;font-size:14px;">👩‍🏫 Adding the whole class at once?</p>
       <div class="form-row">
-        <input id="join-bulk" placeholder="e.g. teacher:msdiaz maria_g juanp alex.duo" style="flex:1;min-width:230px;" />
+        <textarea id="join-bulk" rows="4" placeholder="One username per line, e.g.
+teacher:msdiaz
+maria_g
+juanp" style="flex:1;min-width:230px;resize:vertical;"></textarea>
         <button class="btn small" id="join-bulk-btn">Add the whole class</button>
       </div>
       <p style="font-weight:700;color:var(--ink-soft);font-size:12px;">
@@ -660,7 +665,6 @@ function bindJoinBox(trackedLower) {
         </p>`);
     };
     bulkBtn.addEventListener("click", submitBulk);
-    if (bulkInput.addEventListener) bulkInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitBulk(); });
   }
 }
 
@@ -670,8 +674,8 @@ function startWatch(username) {
   try { localStorage.setItem(WATCH_KEY, username); } catch { /* fine */ }
   setJoinResult(`
     <p style="font-weight:800;color:var(--blue-dark);">
-      ⏳ Waiting for <strong>@${escT(username)}</strong> to be added… after you submit the GitHub issue,
-      a robot enrolls you and this page refreshes itself (checking every 20 seconds).
+      ⏳ Waiting for <strong>@${escT(username)}</strong> to be added — the robot checks in every few
+      minutes, and this page refreshes itself when you land on the board.
     </p>`);
   const iv = setInterval(async () => {
     try {
@@ -955,16 +959,17 @@ function render(cfg, history) {
       ? `${usernames.length} username${usernames.length === 1 ? " is" : "s are"} configured, but no snapshots have been recorded yet.`
       : "No Duolingo usernames are configured yet, so there is nothing to track.";
     const hasLocal = Object.keys(getLocalClass()).length > 0;
+    const emptySet = new Set(usernames.map((u) => u.toLowerCase()));
     renderShell({
       className,
       sub,
-      students: (hasLocal ? "" : welcomeChecklistHtml()) + localClassPanelHtml(),
+      students: joinStatusBannerHtml(emptySet) + (hasLocal ? "" : welcomeChecklistHtml()) + localClassPanelHtml(),
       reports: `<div class="empty">Reports (chart, weekly winners, full history) appear once students are on the shared tracker and the first nightly snapshot lands.</div>`,
       settings: joinBoxHtml(true) + classCodeCardHtml(cfg) + setupHelp(reason) + faqHtml()
     });
-    const emptySet = new Set(usernames.map((u) => u.toLowerCase()));
     const wb = document.getElementById("welcome-add-btn");
     if (wb && wb.addEventListener) wb.addEventListener("click", () => gotoTab("students-add"));
+    bindJoinStatusBanner(emptySet);
     bindLocalClass();
     bindJoinBox(emptySet);
     resumeWatchIfPending(emptySet);
@@ -1214,6 +1219,7 @@ function render(cfg, history) {
     </div>`;
 
   const studentsPane = `
+    ${joinStatusBannerHtml(trackedLower)}
     ${goalSection}
 
     <h2 class="section-title">🏆 Leaderboard</h2>
@@ -1261,6 +1267,7 @@ function render(cfg, history) {
   renderShell({ className, sub, students: studentsPane, reports: reportsPane, settings: settingsPane });
 
   mountLeaderboard("week");
+  bindJoinStatusBanner(trackedLower);
   const exportBtn = document.getElementById("export-csv");
   if (exportBtn && exportBtn.addEventListener) exportBtn.addEventListener("click", () => downloadCsv(csvName, csvText));
 
@@ -1302,17 +1309,17 @@ function renderLockScreen(cfg, history) {
   const root = document.getElementById("tracker-root");
   root.innerHTML = `
     <div style="max-width:480px;margin:48px auto;text-align:center;padding:0 16px;">
-      <div style="font-size:56px;">🔒</div>
-      <h1 style="font-size:26px;font-weight:900;margin:10px 0 6px;">Enter your class code</h1>
-      <p class="muted" style="font-weight:700;">Type the code your teacher gave you to see your class's weekly XP board.</p>
+      <div style="font-size:56px;">🎒</div>
+      <h1 style="font-size:26px;font-weight:900;margin:10px 0 6px;">Join your class</h1>
+      <p class="muted" style="font-weight:700;">Enter the class code your teacher gave you, and your Duolingo username so you show up on the board.</p>
       <div class="form-row" style="justify-content:center;margin-top:16px;">
         <input id="gate-code" placeholder="Class code" maxlength="12" style="text-transform:uppercase;width:160px;text-align:center;font-weight:800;" autocomplete="off" />
       </div>
       <div class="form-row" style="justify-content:center;">
-        <input id="gate-user" placeholder="Your Duolingo username (optional — ⭐ your row)" maxlength="30" style="width:300px;" autocomplete="off" />
+        <input id="gate-user" placeholder="Your Duolingo username" maxlength="30" style="width:300px;" autocomplete="off" />
       </div>
       <p id="gate-error" style="color:var(--red);font-weight:800;"></p>
-      <button class="btn" id="gate-btn">Open my class</button>
+      <button class="btn" id="gate-btn">Join my class</button>
     </div>`;
   const btn = document.getElementById("gate-btn");
   const codeIn = document.getElementById("gate-code");
@@ -1325,12 +1332,81 @@ function renderLockScreen(cfg, history) {
     if (codeHash(code) !== cfg.classCodeHash) { if (err) err.textContent = "That code doesn't match — double-check with your teacher."; return; }
     try { localStorage.setItem(UNLOCK_KEY, String(cfg.classCodeHash)); } catch { /* fine */ }
     const u = String((userIn && userIn.value) || "").trim().replace(/^@/, "");
-    if (USERNAME_RE.test(u)) rememberUsername(u);
+    if (USERNAME_RE.test(u)) {
+      rememberUsername(u);
+      // Entering the correct code + a username IS joining: file the request
+      // automatically so the robot adds them to the teacher's board.
+      if (!trackedSetFrom(cfg, history).has(u.toLowerCase())) {
+        sendJoinRequest(cfg, u);
+        startWatch(u);
+      }
+    }
     render(cfg, history);
   };
   btn.addEventListener("click", submit);
   [codeIn, userIn].forEach((el) => {
     if (el && el.addEventListener) el.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+  });
+}
+
+/* ----- join inbox: students who enter the class code are added automatically ----- */
+
+// Everyone currently on (or configured for) the shared board, lowercased.
+function trackedSetFrom(cfg, history) {
+  const s = new Set(((cfg && cfg.usernames) || []).map((x) => String(x).toLowerCase()));
+  const snaps = (history && history.snapshots) || [];
+  const latest = snaps[snaps.length - 1];
+  if (latest && latest.users) Object.keys(latest.users).forEach((k) => s.add(k.toLowerCase()));
+  return s;
+}
+
+// Drops a join request in the class inbox (anonymous, no account needed).
+// The "Process join requests" robot empties it every ~15 minutes, checks the
+// class-code hash, validates the profile, and adds the student to the board.
+function sendJoinRequest(cfg, username) {
+  if (!cfg || !cfg.joinTopic || typeof fetch !== "function") return false;
+  try {
+    fetch(`https://ntfy.sh/${encodeURIComponent(cfg.joinTopic)}`, {
+      method: "POST",
+      body: JSON.stringify({ u: username, h: cfg.classCodeHash || 0, t: Date.now() })
+    }).catch(() => { /* best-effort */ });
+    return true;
+  } catch { return false; }
+}
+
+/* ----- join-status banner: names that entered the code but aren't on the board ----- */
+
+function pendingJoiners(trackedLower) {
+  return getMyUsernames().filter((u) => !trackedLower.has(u.toLowerCase()));
+}
+
+function joinStatusBannerHtml(trackedLower) {
+  const pending = pendingJoiners(trackedLower);
+  if (!pending.length) return "";
+  const names = pending.map((u) => `@${escT(u)}`).join(", ");
+  return `
+    <div class="card" style="border-color:var(--blue);background:var(--blue-pale);margin-bottom:18px;">
+      <p style="font-weight:800;">🙋 ${names} — your join request is in! The robot adds you to the board within about 15–30 minutes.</p>
+      <div class="form-row" style="margin-top:10px;">
+        <button class="btn blue small" id="join-status-btn">Send my request again</button>
+      </div>
+      <p class="muted" style="font-weight:700;font-size:13px;">
+        No account needed — entering the class code with your username files the request
+        automatically, and this page refreshes itself when you land on the board.
+      </p>
+    </div>`;
+}
+
+function bindJoinStatusBanner(trackedLower) {
+  const b = document.getElementById("join-status-btn");
+  if (!b || !b.addEventListener) return;
+  b.addEventListener("click", () => {
+    const pending = pendingJoiners(trackedLower);
+    if (!pending.length) return;
+    let sent = false;
+    pending.forEach((u) => { if (sendJoinRequest(lastCfg, u)) sent = true; });
+    if (!sent) window.open(issueUrl(pending.join(" ")), "_blank"); // no inbox configured — GitHub path
+    startWatch(pending[0]);
   });
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "Class XP Tracker",
+  "name": "Duolingo XP Tracker (unofficial)",
   "short_name": "XP Tracker",
   "description": "Tracks each student's real Duolingo XP and shows a weekly class leaderboard. Not affiliated with Duolingo.",
   "start_url": "tracker.html",
