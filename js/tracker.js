@@ -325,10 +325,12 @@ function joinBoxHtml(forceOpen = false) {
   try { watchPending = !!localStorage.getItem(WATCH_KEY); } catch { /* fine */ }
   return `
     <details class="card collapser" id="join-details" style="margin-bottom:20px;" ${forceOpen || watchPending ? "open" : ""}>
-      <summary>➕ Add yourself to the tracker</summary>
+      <summary>➕ Add to the shared tracker (everyone sees it)</summary>
       <p class="muted" style="font-weight:700;color:var(--ink-soft);font-size:14px;margin-top:10px;">
-        Type your real Duolingo username. Profiles must not be set to private
-        (Duolingo → Settings → Privacy).
+        Use this to put people on the <strong>shared</strong> tracker — visible to the whole class on
+        any device, with weekly history. It submits through GitHub (a free account is needed to press
+        Submit). Just want a quick list on your own screen? Use the green box above instead.
+        Profiles must not be private (Duolingo → Settings → Privacy).
       </p>
       <div class="form-row">
         <input id="join-username" placeholder="Your Duolingo username" maxlength="30" autocomplete="off" />

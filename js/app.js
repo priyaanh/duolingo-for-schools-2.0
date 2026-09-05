@@ -1291,6 +1291,13 @@ function renderLesson() {
 
   const ex = session.queue[0];
   const pct = Math.round((session.correct / session.total) * 100);
+  // Number keys only apply to choice/listen; match has no Check button.
+  const tip =
+    ex.kind === "choice" || ex.kind === "listen"
+      ? "⌨️ Tip: press 1–4 to answer, Enter to continue"
+      : ex.kind === "match"
+        ? "Tap a word on the left, then its match on the right"
+        : "⌨️ Tip: press Enter to check &amp; continue";
 
   let body = "";
   if (ex.kind === "choice" || ex.kind === "listen") {
@@ -1328,7 +1335,7 @@ function renderLesson() {
     </main>
     <div class="lesson-footer" id="lesson-footer">
       <div class="inner">
-        <div class="msg" id="footer-msg"><span style="color:var(--ink-soft);font-weight:700;font-size:12px;">⌨️ Tip: press 1–4 to answer, Enter to check &amp; continue</span></div>
+        <div class="msg" id="footer-msg"><span style="color:var(--ink-soft);font-weight:700;font-size:12px;">${tip}</span></div>
         <button class="btn" id="check-btn" ${ex.kind === "match" ? "style='visibility:hidden'" : "disabled"}>Check</button>
       </div>
     </div>`,

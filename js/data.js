@@ -287,7 +287,7 @@ const FRENCH = {
         { es: "la grand-mère", en: "the grandmother" },
         { es: "le grand-père", en: "the grandfather" },
         { es: "le fils", en: "the son" },
-        { es: "la fille", en: "the daughter" }
+        { es: "la tante", en: "the aunt" }
       ],
       sentences: [
         { es: "il est mon frère", en: "he is my brother" },
