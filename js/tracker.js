@@ -145,8 +145,9 @@ function localClassPanelHtml() {
       <p class="muted" style="font-weight:700;font-size:14px;margin-top:10px;">
         Paste your students' Duolingo usernames. Their <strong>real</strong> XP is looked up and shown right
         here, saved on this device — perfect for your own screen or projecting in class.
-        Tap <strong>🍎 Make teacher</strong> on any row to mark the teacher — they get a badge and sit out
-        of the student ranking.
+        To add the teacher, put <strong>teacher:</strong> in front of their name
+        (e.g. <code>teacher:msdiaz</code>) — or tap <strong>🍎 Make teacher</strong> on any row later.
+        Teachers get a badge and sit out of the student ranking.
       </p>
       <div class="form-row">
         <input id="local-add-input" placeholder="e.g. maria_g juanp alex.duo" style="flex:1;min-width:230px;" autocomplete="off" />
@@ -177,7 +178,8 @@ async function fetchLocalXp(names, statusEl) {
     try {
       const info = await fetchProfile(n);
       const m = getLocalClass();
-      m[n.toLowerCase()] = { username: info.username || n, name: info.name || n, totalXp: info.totalXp ?? 0, streak: info.streak ?? 0, ts: Date.now() };
+      // Merge so a teacher flag set on the pending row survives the XP fetch.
+      m[n.toLowerCase()] = { ...(m[n.toLowerCase()] || {}), username: info.username || n, name: info.name || n, totalXp: info.totalXp ?? 0, streak: info.streak ?? 0, ts: Date.now() };
       saveLocalClass(m);
       ok++;
     } catch (e) {
@@ -218,23 +220,33 @@ function bindLocalClass() {
 
   const addNames = async () => {
     const status = document.getElementById("local-add-status");
-    const names = Array.from(new Set(String(input.value || "").split(/[\s,;]+/).map((s) => s.trim().replace(/^@/, "")).filter(Boolean)));
-    const valid = names.filter((n) => USERNAME_RE.test(n));
-    const skipped = names.length - valid.length;
+    // A "teacher:" prefix (e.g. "teacher:msdiaz") marks that person as the teacher.
+    const tokens = Array.from(new Set(String(input.value || "").split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)));
+    const parsed = tokens.map((t) => ({
+      isTeacher: /^teacher:/i.test(t),
+      username: t.replace(/^teacher:/i, "").replace(/^@/, "")
+    }));
+    const valid = parsed.filter((p) => USERNAME_RE.test(p.username));
+    const skipped = parsed.length - valid.length;
     if (!valid.length) {
       if (status) status.innerHTML = `<p style="color:var(--red);font-weight:800;">Enter at least one valid Duolingo username.</p>`;
       return;
     }
     const map = getLocalClass();
-    valid.forEach((n) => { if (!map[n.toLowerCase()]) map[n.toLowerCase()] = { username: n }; });
+    valid.forEach((p) => {
+      const k = p.username.toLowerCase();
+      if (!map[k]) map[k] = { username: p.username };
+      if (p.isTeacher) map[k].isTeacher = true;
+    });
     saveLocalClass(map);
     input.value = "";
     refreshLocalPanel(); // show pending rows immediately
-    const { ok, fail } = await fetchLocalXp(valid, document.getElementById("local-add-status"));
+    const { ok, fail } = await fetchLocalXp(valid.map((p) => p.username), document.getElementById("local-add-status"));
     refreshLocalPanel();
+    const teacherCount = valid.filter((p) => p.isTeacher).length;
     const s = document.getElementById("local-add-status");
     if (s)
-      s.innerHTML = `<p style="font-weight:800;color:${ok ? "var(--green-dark)" : "var(--red)"};">Added ${ok} student${ok === 1 ? "" : "s"}${fail ? `, ${fail} couldn't be looked up right now (tap 🔄 Refresh XP to retry)` : ""}${skipped ? `, ${skipped} skipped as invalid` : ""}.</p>`;
+      s.innerHTML = `<p style="font-weight:800;color:${ok ? "var(--green-dark)" : "var(--red)"};">Added ${ok}${teacherCount ? ` (${teacherCount} as teacher)` : ""}${fail ? `, ${fail} couldn't be looked up right now (tap 🔄 Refresh XP to retry)` : ""}${skipped ? `, ${skipped} skipped as invalid` : ""}.</p>`;
   };
 
   addBtn.addEventListener("click", addNames);
