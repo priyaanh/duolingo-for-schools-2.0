@@ -22,6 +22,11 @@ jobs:
           node-version: 20
 
       - name: Fetch XP snapshots
+        # DUOLINGO_JWT is an optional repo secret (Settings → Secrets and variables →
+        # Actions): a Duolingo login token. With it, the snapshot holds each member's
+        # full Total XP and exact daily XP; without it, public-profile numbers only.
+        env:
+          DUOLINGO_JWT: ${{ secrets.DUOLINGO_JWT }}
         run: node scripts/track-xp.mjs
 
       - name: Commit snapshot

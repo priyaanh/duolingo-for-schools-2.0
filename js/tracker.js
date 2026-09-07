@@ -1,6 +1,10 @@
 /*
  * Class XP tracker: renders weekly XP per student from the daily snapshots
  * that .github/workflows/track-xp.yml commits to data/xp-history.json.
+ * Snapshot entries: { name, totalXp, publicXp, streak, source, daily? } —
+ * source "duolingo-account" means the robot had a Duolingo login token, so
+ * totalXp is the app's full Total XP and daily holds exact XP per day; otherwise
+ * numbers are public-profile (language-course-only) XP.
  *
  * Self-serve joining: anyone can type their Duolingo username. The page tries
  * a live lookup (best-effort, via public CORS relays), and permanent enrollment
@@ -238,7 +242,9 @@ function localClassBoardHtml() {
   const xpCell = (e) => {
     if (typeof e.totalXp !== "number") return "—";
     const wk = localWeekXp(e);
-    return `⚡ ${fmt(wk ?? 0)} this week <span class="muted" style="font-weight:700;">(${fmt(e.totalXp)} total${e.asOf ? `, as of ${escT(e.asOf)}` : ""})</span>`;
+    const firstDay = Object.keys(e.hist || {}).sort()[0];
+    const partial = firstDay && firstDay >= weekStart(todayLocal()) ? ` · counted since ${escT(shortDay(firstDay))}` : "";
+    return `⚡ ${fmt(wk ?? 0)} this week${partial} <span class="muted" style="font-weight:700;">(${fmt(e.totalXp)} in language courses${e.asOf ? `, as of ${escT(e.asOf)}` : ""})</span>`;
   };
   const streakCell = (e) => (typeof e.streak === "number" ? `🔥 ${fmt(e.streak)}` : "");
 
@@ -295,9 +301,12 @@ function localClassPanelHtml() {
       <summary>👩‍🏫 ${has ? "Your class" : "Make your class"} — no GitHub, no accounts</summary>
       <p class="muted" style="font-weight:700;font-size:14px;margin-top:10px;">
         Type your students' Duolingo usernames, put the teacher's username in its own box, and press
-        the button — everyone's <strong>real</strong> XP comes up, ranked by this week
+        the button — everyone's XP comes up from their public Duolingo profile, ranked by this week
         (Monday–Sunday). Saved on this device. Teachers get a 🍎 badge and sit out of the ranking;
-        you can also switch anyone later with the 🍎/🎒 buttons on their row.
+        you can also switch anyone later with the 🍎/🎒 buttons on their row. This quick view counts
+        <strong>language-course XP</strong> only (public profiles leave out Math and Music) and can only
+        count the week from the moment someone is added — the shared tracker with a Duolingo token has
+        the full numbers.
       </p>
       <div class="form-row">
         <textarea id="local-add-input" rows="5" placeholder="One student username per line, e.g.
@@ -319,10 +328,12 @@ alex.duo" style="flex:1;min-width:240px;resize:vertical;" autocomplete="off"></t
            </div>
            <p class="muted" style="font-size:12px;font-weight:700;">
              <strong>This week</strong> counts Monday–Sunday (Pacific) from each student's first reading on
-             this device — it starts at 0 when someone is added and grows as they practice. The page takes a
-             fresh reading each time it's opened. Saved on <strong>this device only</strong>; tap
-             <strong>Share with the whole class</strong> to publish to the shared tracker (needs GitHub once),
-             which records exact numbers every night automatically.
+             this device — it starts at 0 when someone is added and grows as they practice, so a mid-week
+             start misses the earlier days. XP here is <strong>language-course XP</strong> from public
+             profiles (Duolingo Math and Music aren't included). Saved on <strong>this device only</strong>;
+             tap <strong>Share with the whole class</strong> to publish to the shared tracker, which records
+             every night automatically — and, once a Duolingo token is connected (Settings), the app's full
+             Total XP and exact XP per day for the whole week.
            </p>`
         : ""}
     </details>`;
@@ -338,7 +349,9 @@ async function fetchLocalXp(names, statusEl) {
       const info = await fetchProfile(n);
       const m = getLocalClass();
       const prev = m[n.toLowerCase()] || {};
-      const xp = info.totalXp ?? 0;
+      // The device list compares readings over time, so it always uses the same
+      // measure: language-course XP (what public lookups return).
+      const xp = typeof info.publicXp === "number" ? info.publicXp : (info.totalXp ?? 0);
       // Keep the FIRST reading of each day as that day's baseline (so later
       // refreshes the same day count intra-day XP instead of resetting it).
       const day = todayLocal();
@@ -479,30 +492,50 @@ function bindLocalClass() {
 
 /* -------------------- live profile lookup (best-effort) -------------------- */
 
+// Public profile lookup. Its totalXp counts LANGUAGE courses only — XP from
+// Duolingo Math and Music is left out — so it can sit far below the Total XP the
+// app shows. The nightly robot records the full number once a Duolingo token is
+// connected. The timestamp defeats relay caches so refreshes see today's XP.
 const duoApiUrl = (u) =>
-  `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(u)}&fields=users%7Busername,name,totalXp,streak%7D`;
+  `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(u)}&fields=users%7Bid,username,name,totalXp,streak,courses%7Btitle,xp%7D%7D&_=${Date.now()}`;
+
+// Nightly entries carry source: "duolingo-account" when read with a token
+// (full Total XP); everything else is language-course XP from a public profile.
+const isFullTotal = (info) => !!info && info.source === "duolingo-account";
+const xpSummary = (info) =>
+  isFullTotal(info) ? `⚡ ${fmt(info.totalXp ?? 0)} total XP` : `⚡ ${fmt(info.totalXp ?? 0)} XP in language courses`;
+const xpFootnote = (info) => {
+  if (isFullTotal(info)) return "";
+  const parts = (info.courses || [])
+    .filter((c) => (c.xp || 0) > 0)
+    .sort((a, b) => b.xp - a.xp)
+    .map((c) => `${escT(c.title)} ${fmt(c.xp)}`);
+  return `<div class="muted" style="font-weight:700;font-size:12px;margin-top:6px;">${parts.length ? parts.join(" · ") + ". " : ""}Public profiles leave out Duolingo Math and Music XP, so the app's <strong>Total XP</strong> can be higher. The shared tracker records the full number once a Duolingo token is connected (Settings → Connect to Duolingo).</div>`;
+};
 
 // Direct first (in case CORS ever opens up), then public relays. All flaky —
 // treat success as a bonus; permanent enrollment never depends on these.
 const RELAYS = [
-  (u) => u,
-  (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  (u) => `https://api.cors.lol/?url=${encodeURIComponent(u)}`
+  { wrap: (u) => u },
+  { wrap: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+  { wrap: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, unwrap: (j) => (j && typeof j.contents === "string" ? JSON.parse(j.contents) : j) },
+  { wrap: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
+  { wrap: (u) => `https://api.cors.lol/?url=${encodeURIComponent(u)}` }
 ];
 
 async function fetchProfile(username) {
   const target = duoApiUrl(username);
   let lastErr = null;
-  for (const wrap of RELAYS) {
+  for (const relay of RELAYS) {
     try {
       const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
       const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
-      const res = await fetch(wrap(target), ctrl ? { signal: ctrl.signal } : {});
+      const res = await fetch(relay.wrap(target), ctrl ? { signal: ctrl.signal } : {});
       if (timer) clearTimeout(timer);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const info = json.users && json.users[0];
+      let json = await res.json();
+      if (relay.unwrap) json = relay.unwrap(json);
+      const info = json && json.users && json.users[0];
       if (!info) { const e = new Error("not found"); e.notFound = true; throw e; }
       return info;
     } catch (e) {
@@ -517,7 +550,7 @@ async function fetchProfile(username) {
     const snaps = h.snapshots || [];
     for (let i = snaps.length - 1; i >= 0; i--) {
       const hit = Object.entries(snaps[i].users || {}).find(([k]) => k.toLowerCase() === username.toLowerCase());
-      if (hit) return { username: hit[0], name: hit[1].name, totalXp: hit[1].totalXp, streak: hit[1].streak, asOf: snaps[i].date };
+      if (hit) return { ...hit[1], username: hit[0], asOf: snaps[i].date };
     }
   } catch { /* fine — fall through */ }
   const e = new Error("unreachable");
@@ -606,7 +639,8 @@ function bindJoinBox(trackedLower) {
       setJoinResult(`
         <div style="border:2px solid var(--green);background:var(--green-pale);border-radius:12px;padding:14px;font-weight:800;">
           🎉 <strong>${profileLink(name, escT(info.name || name))}</strong> <span style="color:var(--ink-soft)">@${escT(name)}</span>
-          — ⚡ ${fmt(info.totalXp ?? 0)} total XP · 🔥 ${fmt(info.streak ?? 0)} day streak${info.asOf ? ` <span class="muted" style="font-weight:700;">(nightly number from ${escT(info.asOf)})</span>` : ""}
+          — ${xpSummary(info)} · 🔥 ${fmt(info.streak ?? 0)} day streak${info.asOf ? ` <span class="muted" style="font-weight:700;">(nightly number from ${escT(info.asOf)})</span>` : ""}
+          ${xpFootnote(info)}
           ${already
             ? `<div style="margin-top:6px;">✅ Already on the class tracker below.</div>`
             : `<div style="margin-top:6px;">Not on the class tracker yet — give this username to whoever runs the tracker (no account needed), or press <strong>Join the class tracker</strong> if you have a GitHub account.</div>`}
@@ -723,7 +757,7 @@ function addLiveRow(info, trackedLower) {
         <span class="chip pending">live · not enrolled yet</span></td>
       <td class="cell-warn">—</td>
       <td>—</td>
-      <td>${fmt(info.totalXp ?? 0)}</td>
+      <td title="${isFullTotal(info) ? "Total XP" : "Language-course XP from the public profile — the app's Total XP (with Math and Music) can be higher"}">${fmt(info.totalXp ?? 0)}${isFullTotal(info) ? "" : ' <span class="muted" style="font-size:11px;">(languages)</span>'}</td>
       <td>🔥 ${fmt(info.streak ?? 0)}</td>
     </tr>`);
 }
@@ -765,14 +799,36 @@ function sparkline(values, max) {
   return `${open}<polyline points="${pts}" fill="none" stroke="var(--chart-bar)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(n - 1).toFixed(1)}" cy="${y(values[n - 1]).toFixed(1)}" r="2.5" fill="var(--chart-bar)"/></svg>`;
 }
 
+// Snapshot helpers shared by the weekly math and the daily chart.
+// xpOf: the measure to difference between snapshots. Public-profile XP is
+// recorded in every snapshot (publicXp once a token is in use), so differences
+// stay consistent when the tracker switches to full account totals.
+const xpOf = (info) => (info && typeof info.publicXp === "number" ? info.publicXp : info ? info.totalXp : 0);
+// buildDailyOf: { username: { "YYYY-MM-DD": xp } } from token-recorded snapshots,
+// newer snapshots winning so corrections flow through.
+function buildDailyOf(snaps) {
+  const dailyOf = {};
+  snaps.forEach((s) => {
+    Object.entries(s.users || {}).forEach(([u, info]) => {
+      if (info && info.daily) dailyOf[u] = Object.assign(dailyOf[u] || {}, info.daily);
+    });
+  });
+  return dailyOf;
+}
+
 function dailyChartHtml(snaps) {
   if (snaps.length < 2) return "";
+  const dailyOf = buildDailyOf(snaps);
   const days = [];
   for (let i = 1; i < snaps.length; i++) {
-    const prev = snaps[i - 1].users, cur = snaps[i].users;
+    const prev = snaps[i - 1].users, cur = snaps[i].users, date = snaps[i].date;
     let gain = 0;
-    Object.keys(cur).forEach((u) => { if (u in prev) gain += Math.max(0, cur[u].totalXp - prev[u].totalXp); });
-    days.push({ date: snaps[i].date, gain });
+    Object.keys(cur).forEach((u) => {
+      const d = dailyOf[u];
+      if (d && date in d) gain += d[date];
+      else if (u in prev) gain += Math.max(0, xpOf(cur[u]) - xpOf(prev[u]));
+    });
+    days.push({ date, gain });
   }
   const recent = days.slice(-14);
   const max = Math.max(...recent.map((d) => d.gain));
@@ -838,8 +894,38 @@ function faqHtml() {
         <li><strong>Profile set to private?</strong> In the Duolingo app: Profile → Settings → Privacy — the tracker can only see public profiles.</li>
         <li><strong>Username spelled exactly right?</strong> It's the @username on your Duolingo profile page, not your display name.</li>
         <li><strong>Just added or just practiced?</strong> XP updates once a night (just after midnight Pacific), so today's lessons show up tomorrow. Whoever runs the tracker can trigger an instant refresh: GitHub → Actions → Track Duolingo XP → Run workflow.</li>
-        <li><strong>Weekly numbers look small?</strong> "This week" starts fresh every Monday and only counts XP earned since tracking began.</li>
+        <li><strong>Total XP lower than the app shows?</strong> Public profiles count language-course XP only — Duolingo Math and Music XP are left out. Once whoever runs the tracker connects a Duolingo token (Settings → Connect to Duolingo), the nightly robot records the app's full Total XP.</li>
+        <li><strong>Weekly numbers look small?</strong> Without a token, "this week" can only count XP since tracking began. With a token it comes from Duolingo's own XP-per-day records, exact from Monday to Sunday.</li>
       </ul>
+    </details>`;
+}
+
+/* -------------------- connect-to-Duolingo card (settings) -------------------- */
+
+// Duolingo issues no developer API keys; a login token stored as a GitHub
+// Actions secret is the closest thing. Instructions only — nothing secret here.
+function connectDuolingoCardHtml(connected) {
+  return `
+    <details class="card collapser setup" style="margin-top:14px;${connected ? "" : "border-color:var(--yellow);"}"${connected ? "" : " open"}>
+      <summary>🔑 Connect to Duolingo — ${connected ? "connected: full Total XP and daily XP" : "get the app's full Total XP and exact weekly XP"}</summary>
+      <p class="muted" style="font-weight:700;font-size:14px;margin-top:10px;">
+        Duolingo doesn't issue developer API keys, so the tracker uses the next best thing: a
+        <strong>login token</strong> from a Duolingo account, stored as a secret in the GitHub project.
+        The nightly robot then reads every class member's <strong>full Total XP</strong> (public profiles
+        leave out Math and Music) and <strong>exact XP per day</strong> straight from Duolingo. The token
+        is never shown on this page.
+      </p>
+      <ol>
+        <li>In Chrome or Edge on a computer, log in at <a href="https://www.duolingo.com" target="_blank" rel="noopener">duolingo.com</a> (the teacher's account or your own).</li>
+        <li>Open developer tools (<code>F12</code>, or <code>⌥⌘I</code> on a Mac) → <strong>Application</strong> tab → <strong>Cookies</strong> → <code>https://www.duolingo.com</code> → click the <code>jwt_token</code> row and copy its <strong>Value</strong> (a long string of letters, digits and dots).</li>
+        <li>On GitHub open the project → <strong>Settings</strong> → <strong>Secrets and variables</strong> → <strong>Actions</strong> → <strong>New repository secret</strong>. Name: <code>DUOLINGO_JWT</code>. Secret: paste the token. Save.</li>
+        <li><strong>Actions</strong> tab → <strong>Track Duolingo XP</strong> → <strong>Run workflow</strong>. About a minute later, refresh this page — the badge at the top turns 🟢.</li>
+      </ol>
+      <p class="muted" style="font-weight:700;font-size:12px;">
+        Keep the token private: it works like a login to that Duolingo account. Never paste it into this
+        page, a chat, or a file in the project. Logging out of Duolingo everywhere (or changing the
+        password) invalidates it; then repeat the steps with a fresh one.
+      </p>
     </details>`;
 }
 
@@ -955,10 +1041,16 @@ function render(cfg, history) {
     .filter((s) => s.users && Object.keys(s.users).length);
 
   const className = activeClassName(cfg);
+  const newest = snaps.length ? snaps[snaps.length - 1] : null;
+  // "Connected" = the nightly robot read Duolingo with a login token, so totals
+  // are the app's full Total XP and weekly XP comes from exact per-day records.
+  const connected = !!newest && Object.values(newest.users).some((i) => isFullTotal(i));
   const sub =
-    `<span class="chip done" title="Every name links to the real profile; data is fetched nightly from duolingo.com">🟢 Connected to real Duolingo</span>` +
-    (snaps.length
-      ? ` <span class="sub" style="font-size:13px;font-weight:700;color:var(--ink-soft);">Nightly public-profile data · latest full day: <strong>${escT(snaps[snaps.length - 1].date)}</strong> · weeks run Monday–Sunday, Pacific time</span>`
+    (connected
+      ? `<span class="chip done" title="Read from Duolingo with a login token: full Total XP (including Math and Music) and exact XP per day">🟢 Connected to Duolingo · full Total XP &amp; daily XP</span>`
+      : `<span class="chip pending" title="Public profiles count language-course XP only and can't show XP per day. Connect a Duolingo token in Settings for the app's full numbers.">🟡 Public-profile data · language-course XP only</span>`) +
+    (newest
+      ? ` <span class="sub" style="font-size:13px;font-weight:700;color:var(--ink-soft);">Nightly data · latest full day: <strong>${escT(newest.date)}</strong> · weeks run Monday–Sunday, Pacific time</span>`
       : "");
 
   if (!snaps.length) {
@@ -972,7 +1064,7 @@ function render(cfg, history) {
       sub,
       students: joinStatusBannerHtml(emptySet) + (hasLocal ? "" : welcomeChecklistHtml()) + localClassPanelHtml(),
       reports: `<div class="empty">Reports (chart, weekly winners, full history) appear once students are on the shared tracker and the first nightly snapshot lands.</div>`,
-      settings: joinBoxHtml(true) + classCodeCardHtml(cfg) + setupHelp(reason) + faqHtml()
+      settings: joinBoxHtml(true) + classCodeCardHtml(cfg) + connectDuolingoCardHtml(false) + setupHelp(reason) + faqHtml()
     });
     const wb = document.getElementById("welcome-add-btn");
     if (wb && wb.addEventListener) wb.addEventListener("click", () => gotoTab("students-add"));
@@ -998,22 +1090,42 @@ function render(cfg, history) {
     lastSnapOfWeek[w] = s; // snaps are date-sorted, so this ends at the week's last snapshot
     firstSnapOfWeekWithUser[w] = firstSnapOfWeekWithUser[w] || {};
     Object.entries(s.users).forEach(([u, info]) => {
-      if (!(u in firstSnapOfWeekWithUser[w])) firstSnapOfWeekWithUser[w][u] = info.totalXp;
+      if (!(u in firstSnapOfWeekWithUser[w])) firstSnapOfWeekWithUser[w][u] = xpOf(info);
     });
   });
 
-  // XP gained by user u during week w:
-  //   end   = totalXp in the week's last snapshot that includes u
-  //   start = totalXp in the last snapshot of any earlier week that includes u,
+  // Exact XP per day per user, recorded when the nightly robot had a Duolingo
+  // token. Sum of a week's days = that week's XP, straight from Duolingo.
+  const dailyOf = buildDailyOf(snaps);
+  function dailySum(u, w) {
+    const d = dailyOf[u];
+    if (!d || w > latest.date) return null;
+    let sum = 0;
+    for (let i = 0; i < 7; i++) {
+      const day = addDays(w, i);
+      if (day > latest.date) break;
+      if (!(day in d)) return null; // a gap — fall back to snapshot differences
+      sum += d[day];
+    }
+    return sum;
+  }
+
+  // XP gained by user u during week w: exact daily records when available, else
+  //   end   = XP in the week's last snapshot that includes u
+  //   start = XP in the last snapshot of any earlier week that includes u,
   //           else the first in-week value (covers the very first tracked week)
+  // Differences always use the same measure (see xpOf) so connecting a token
+  // never shows up as a giant one-week "gain".
   function weeklyGain(u, w) {
+    const exact = dailySum(u, w);
+    if (exact !== null) return exact;
     const endSnap = lastSnapOfWeek[w];
     if (!endSnap || !(u in endSnap.users)) return null;
-    const end = endSnap.users[u].totalXp;
+    const end = xpOf(endSnap.users[u]);
     let start = null;
     for (let i = weeks.indexOf(w) - 1; i >= 0; i--) {
       const prev = lastSnapOfWeek[weeks[i]];
-      if (prev && u in prev.users) { start = prev.users[u].totalXp; break; }
+      if (prev && u in prev.users) { start = xpOf(prev.users[u]); break; }
     }
     if (start === null) start = firstSnapOfWeekWithUser[w][u];
     if (start === null || start === undefined) return null;
@@ -1269,6 +1381,7 @@ function render(cfg, history) {
   const settingsPane = `
     ${joinBoxHtml()}
     ${classCodeCardHtml(cfg)}
+    ${connectDuolingoCardHtml(connected)}
     ${faqHtml()}`;
 
   renderShell({ className, sub, students: studentsPane, reports: reportsPane, settings: settingsPane });
