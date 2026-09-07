@@ -476,7 +476,16 @@ function bindLocalClass() {
   if (shareBtn && shareBtn.addEventListener)
     shareBtn.addEventListener("click", () => {
       const names = Object.values(getLocalClass()).map((e) => e.username);
-      if (names.length) window.open(issueUrl(names.join(" ")), "_blank");
+      if (!names.length) return;
+      const status = document.getElementById("local-add-status");
+      if (lastCfg && lastCfg.joinTopic) {
+        // Straight to the robot's inbox — nobody needs an account.
+        names.forEach((u) => sendJoinRequest(lastCfg, u));
+        startWatch(names[0]);
+        if (status) status.innerHTML = `<p style="font-weight:800;color:var(--green-dark);">✅ Sent ${names.length} name${names.length === 1 ? "" : "s"} to the shared tracker — the robot adds them within about 15 minutes, and this page refreshes itself when it's done. No accounts needed.</p>`;
+      } else {
+        window.open(issueUrl(names.join(" ")), "_blank");
+      }
     });
 
   const clearBtn = document.getElementById("local-clear");
@@ -567,13 +576,16 @@ const issueUrl = (u) =>
 function joinBoxHtml(forceOpen = false) {
   let watchPending = false;
   try { watchPending = !!localStorage.getItem(WATCH_KEY); } catch { /* fine */ }
+  const inbox = !!(lastCfg && lastCfg.joinTopic); // requests go to the robot's inbox — no accounts
   return `
     <details class="card collapser" id="join-details" style="margin-bottom:20px;" ${forceOpen || watchPending ? "open" : ""}>
       <summary>➕ Add to the shared tracker (everyone sees it)</summary>
       <p class="muted" style="font-weight:700;color:var(--ink-soft);font-size:14px;margin-top:10px;">
         Use this to put people on the <strong>shared</strong> tracker — visible to the whole class on
-        any device, with weekly history. It submits through GitHub (a free account is needed to press
-        Submit). Just want a quick list on your own screen? Use the green box on the
+        any device, with weekly history. ${inbox
+          ? "<strong>No accounts needed</strong>: requests go straight to the class robot."
+          : "It submits through GitHub (a free account is needed to press Submit)."}
+        Just want a quick list on your own screen? Use the green box on the
         <strong>Students</strong> tab instead. Profiles must not be private (Duolingo → Settings → Privacy).
       </p>
       <div class="form-row">
@@ -583,9 +595,9 @@ function joinBoxHtml(forceOpen = false) {
       </div>
       <div id="join-result"></div>
       <p style="font-weight:700;color:var(--ink-soft);font-size:13px;margin-top:8px;">
-        <strong>No account needed:</strong> just give your Duolingo username to whoever runs this
-        tracker. Already have a GitHub account? <strong>Join the class tracker</strong> files the
-        request for you automatically instead.
+        ${inbox
+          ? "<strong>Show my XP</strong> looks you up right now; <strong>Join the class tracker</strong> sends your name to the robot, which adds you within about 15 minutes."
+          : "<strong>No account needed:</strong> just give your Duolingo username to whoever runs this tracker. Already have a GitHub account? <strong>Join the class tracker</strong> files the request for you automatically instead."}
       </p>
       <hr style="border:none;border-top:2px solid var(--line);margin:14px 0;" />
       <p style="font-weight:800;font-size:14px;">👩‍🏫 Adding the whole class at once?</p>
@@ -597,9 +609,9 @@ juanp" style="flex:1;min-width:230px;resize:vertical;"></textarea>
         <button class="btn small" id="join-bulk-btn">Add the whole class</button>
       </div>
       <p style="font-weight:700;color:var(--ink-soft);font-size:12px;">
-        Opens one prefilled GitHub request with every name — the robot checks each one against
-        Duolingo and replies with a per-name report. Put <strong>teacher:</strong> in front of the
-        teacher's name (e.g. <code>teacher:msdiaz</code>) to add them as the teacher.
+        ${inbox
+          ? "Sends every name to the robot, which checks each one against Duolingo and adds them. Teachers get their 🍎 badge from whoever runs the tracker (the 🍎 toggle in the class box, or the Add students workflow)."
+          : "Opens one prefilled GitHub request with every name — the robot checks each one against Duolingo and replies with a per-name report. Put <strong>teacher:</strong> in front of the teacher's name (e.g. <code>teacher:msdiaz</code>) to add them as the teacher."}
       </p>
     </details>`;
 }
@@ -666,7 +678,11 @@ function bindJoinBox(trackedLower) {
         setJoinResult(`<p style="font-weight:800;color:var(--green-dark);">✅ @${escT(u)} is already being tracked — look for the row below!</p>`);
         return;
       }
-      window.open(issueUrl(u), "_blank");
+      if (lastCfg && lastCfg.joinTopic && sendJoinRequest(lastCfg, u)) {
+        setJoinResult(`<p style="font-weight:800;color:var(--green-dark);">✅ Sent — the robot adds @${escT(u)} to the shared tracker within about 15 minutes, and this page refreshes itself when it's done. No account needed.</p>`);
+      } else {
+        window.open(issueUrl(u), "_blank"); // no inbox configured — GitHub path
+      }
       startWatch(u);
     });
   }
@@ -688,17 +704,28 @@ function bindJoinBox(trackedLower) {
         return;
       }
       const skipped = tokens.length - valid.length;
-      const title = valid.map((p) => (p.isTeacher ? `teacher:${p.username}` : p.username)).join(" ");
-      window.open(issueUrl(title), "_blank");
+      const teacherCount = valid.filter((p) => p.isTeacher).length;
       valid.forEach((p) => rememberUsername(p.username));
       startWatch(valid[0].username);
-      const teacherCount = valid.filter((p) => p.isTeacher).length;
-      setJoinResult(`
-        <p style="font-weight:800;color:var(--blue-dark);">
-          ⏳ Submitting ${valid.length} username${valid.length === 1 ? "" : "s"}${teacherCount ? ` (${teacherCount} as teacher)` : ""}${skipped ? ` (${skipped} skipped as invalid)` : ""} —
-          press <strong>Submit new issue</strong> on the GitHub page that just opened, and this page
-          will refresh itself when the robot finishes.
-        </p>`);
+      const counts = `${valid.length} username${valid.length === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped as invalid)` : ""}`;
+      if (lastCfg && lastCfg.joinTopic) {
+        valid.forEach((p) => sendJoinRequest(lastCfg, p.username));
+        setJoinResult(`
+          <p style="font-weight:800;color:var(--green-dark);">
+            ✅ Sent ${counts} to the shared tracker — the robot checks each name with Duolingo and adds them
+            within about 15 minutes; this page refreshes itself when it's done. No accounts needed.
+            ${teacherCount ? "Teachers get their 🍎 badge from whoever runs the tracker (the 🍎 toggle, or the Add students workflow)." : ""}
+          </p>`);
+      } else {
+        const title = valid.map((p) => (p.isTeacher ? `teacher:${p.username}` : p.username)).join(" ");
+        window.open(issueUrl(title), "_blank");
+        setJoinResult(`
+          <p style="font-weight:800;color:var(--blue-dark);">
+            ⏳ Submitting ${counts}${teacherCount ? ` (${teacherCount} as teacher)` : ""} —
+            press <strong>Submit new issue</strong> on the GitHub page that just opened, and this page
+            will refresh itself when the robot finishes.
+          </p>`);
+      }
     };
     bulkBtn.addEventListener("click", submitBulk);
   }
@@ -804,6 +831,11 @@ function sparkline(values, max) {
 // recorded in every snapshot (publicXp once a token is in use), so differences
 // stay consistent when the tracker switches to full account totals.
 const xpOf = (info) => (info && typeof info.publicXp === "number" ? info.publicXp : info ? info.totalXp : 0);
+// pairGain: XP earned between two snapshot entries of the same user. When both
+// were read with a token, the full Total XP is compared (so Math and Music
+// count); otherwise the language-course number that every snapshot has.
+const pairGain = (prev, cur) =>
+  Math.max(0, isFullTotal(prev) && isFullTotal(cur) ? cur.totalXp - prev.totalXp : xpOf(cur) - xpOf(prev));
 // buildDailyOf: { username: { "YYYY-MM-DD": xp } } from token-recorded snapshots,
 // newer snapshots winning so corrections flow through.
 function buildDailyOf(snaps) {
@@ -826,7 +858,7 @@ function dailyChartHtml(snaps) {
     Object.keys(cur).forEach((u) => {
       const d = dailyOf[u];
       if (d && date in d) gain += d[date];
-      else if (u in prev) gain += Math.max(0, xpOf(cur[u]) - xpOf(prev[u]));
+      else if (u in prev) gain += pairGain(prev[u], cur[u]);
     });
     days.push({ date, gain });
   }
@@ -1084,13 +1116,13 @@ function render(cfg, history) {
   const latest = snaps[snaps.length - 1];
   const weeks = Array.from(new Set(snaps.map((s) => weekStart(s.date)))).sort();
   const lastSnapOfWeek = {};
-  const firstSnapOfWeekWithUser = {}; // per week, per user: first totalXp seen inside that week
+  const firstSnapOfWeekWithUser = {}; // per week, per user: first snapshot entry seen inside that week
   snaps.forEach((s) => {
     const w = weekStart(s.date);
     lastSnapOfWeek[w] = s; // snaps are date-sorted, so this ends at the week's last snapshot
     firstSnapOfWeekWithUser[w] = firstSnapOfWeekWithUser[w] || {};
     Object.entries(s.users).forEach(([u, info]) => {
-      if (!(u in firstSnapOfWeekWithUser[w])) firstSnapOfWeekWithUser[w][u] = xpOf(info);
+      if (!(u in firstSnapOfWeekWithUser[w])) firstSnapOfWeekWithUser[w][u] = info;
     });
   });
 
@@ -1114,22 +1146,22 @@ function render(cfg, history) {
   //   end   = XP in the week's last snapshot that includes u
   //   start = XP in the last snapshot of any earlier week that includes u,
   //           else the first in-week value (covers the very first tracked week)
-  // Differences always use the same measure (see xpOf) so connecting a token
+  // Differences compare like with like (see pairGain) so connecting a token
   // never shows up as a giant one-week "gain".
   function weeklyGain(u, w) {
     const exact = dailySum(u, w);
     if (exact !== null) return exact;
     const endSnap = lastSnapOfWeek[w];
     if (!endSnap || !(u in endSnap.users)) return null;
-    const end = xpOf(endSnap.users[u]);
-    let start = null;
+    const endInfo = endSnap.users[u];
+    let startInfo = null;
     for (let i = weeks.indexOf(w) - 1; i >= 0; i--) {
       const prev = lastSnapOfWeek[weeks[i]];
-      if (prev && u in prev.users) { start = xpOf(prev.users[u]); break; }
+      if (prev && u in prev.users) { startInfo = prev.users[u]; break; }
     }
-    if (start === null) start = firstSnapOfWeekWithUser[w][u];
-    if (start === null || start === undefined) return null;
-    return Math.max(0, end - start);
+    if (!startInfo) startInfo = firstSnapOfWeekWithUser[w][u];
+    if (!startInfo) return null;
+    return pairGain(startInfo, endInfo);
   }
 
   // "This week" is the real current Mon-Sun week (Pacific), not just the newest

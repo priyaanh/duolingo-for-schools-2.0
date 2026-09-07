@@ -42,8 +42,9 @@ or 🟢 connected.
 
 ## Connect to Duolingo (full Total XP and exact weekly XP)
 
-One-time setup by whoever runs the tracker, using a Duolingo account they control (the teacher's
-is ideal). The token goes into a GitHub **secret**: the robot can use it, but it is never shown on
+One-time setup by **whoever runs the tracker only** — students never touch GitHub. A single token
+from one Duolingo account (yours or the teacher's) lets the robot read every class member's full
+Total XP. The token goes into a GitHub **secret**: the robot can use it, but it is never shown on
 the page or written into the project.
 
 1. In Chrome or Edge on a computer, log in at [duolingo.com](https://www.duolingo.com).
@@ -78,20 +79,16 @@ DUOLINGO_JWT=<token> node scripts/check-duolingo.mjs priyaanh # full Total XP + 
 - **CSV export** — download everyone's weekly XP, totals, and streaks for a gradebook.
 - **Dark mode** (follows the device) and a clean **print** layout.
 
-## Adding your class — no accounts needed
+## Adding your class — students never need an account
 
-**On the tracker page, no GitHub:** open **👩‍🏫 Make your class**, type the students' Duolingo
-usernames in the first box, the **teacher's username in its own box underneath**, and press
-**✅ Make my class**. Everyone's public-profile XP is looked up live and shown ranked by this
-week's (Mon–Sun) XP, saved on that device. (A `teacher:` prefix in the students box also works.)
-Tap **Share with the whole class** to also publish it to the shared tracker (below) so students
-see it on their own devices and exact nightly history builds up.
+**Students:** open the tracker link, type the **class code** and their **Duolingo username**, done.
+The page drops the request in the robot's inbox and the robot adds them within about 15 minutes.
+No GitHub, no sign-ups. The same inbox powers **➕ Add to the shared tracker** (one name or a whole
+pasted list) and **Share with the whole class** in the device-local **👩‍🏫 Make your class** box.
 
-**Shared tracker (everyone sees it, with weekly history):**
-- **From the tracker page:** open **➕ Add to the shared tracker** → paste all the usernames
-  (with `teacher:` prefixes as needed) → it opens one prefilled GitHub request; submit it and the
-  robot enrolls everyone and replies with a per-name report.
-- **From GitHub:** **Actions** tab → **Add students** → **Run workflow** → paste the usernames.
+**Whoever runs the tracker** can also add names from GitHub: **Actions** tab → **Add students** →
+**Run workflow** → paste the usernames (`teacher:` prefix marks the teacher). That's also where the
+class code is set.
 
 Either way each name is checked against Duolingo (typos, duplicates, and private profiles are
 skipped with an explanation) and added to [data/usernames.json](data/usernames.json). Profiles
