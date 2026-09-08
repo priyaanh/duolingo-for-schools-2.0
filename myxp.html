@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Get my real Duolingo XP</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 16px/1.6 system-ui, -apple-system, sans-serif; background: #f7f7f7; color: #111; }
+  @media (prefers-color-scheme: dark) { body { background: #131313; color: #eee; } .card { background: #1e1e1e !important; } code, .code { background: #000 !important; color: #7ee787 !important; } }
+  .wrap { max-width: 620px; margin: 0 auto; padding: 24px 18px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: #777; font-weight: 700; margin: 0 0 20px; }
+  .card { background: #fff; border: 1px solid #e3e3e3; border-radius: 16px; padding: 18px 20px; margin: 16px 0; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .btn { display: inline-block; background: #58cc02; color: #fff !important; font-weight: 800; text-decoration: none; padding: 12px 20px; border-radius: 12px; border: 0; font-size: 16px; cursor: grab; }
+  .btn.copy { background: #1cb0f6; cursor: pointer; }
+  ol { padding-left: 20px; } li { margin: 8px 0; }
+  .code { display: block; white-space: pre-wrap; word-break: break-all; background: #f0f0f0; border: 1px solid #ddd; border-radius: 10px; padding: 12px; font: 12px/1.5 ui-monospace, Menlo, monospace; max-height: 150px; overflow: auto; }
+  .note { color: #777; font-size: 13px; font-weight: 700; }
+  a.plain { color: #1cb0f6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚡ Get my real Duolingo XP</h1>
+  <p class="sub">Shows your true Total XP (Math and Music included), not the smaller languages-only number.</p>
+
+  <div class="card">
+    <p style="font-weight:800;margin-top:0;">Option A — one-click button</p>
+    <ol>
+      <li>Drag this green button up to your <b>bookmarks bar</b>:<br /><br />
+        <a class="btn" id="bm" href="#">📊 My Duolingo XP</a>
+      </li>
+      <li>Go to <a class="plain" href="https://www.duolingo.com" target="_blank" rel="noopener">duolingo.com</a> and log in.</li>
+      <li>Click the <b>📊 My Duolingo XP</b> bookmark. A box shows your real numbers.</li>
+    </ol>
+    <p class="note">Can't drag? Right-click your bookmarks bar → Add page → paste the code below as the URL.</p>
+  </div>
+
+  <div class="card">
+    <p style="font-weight:800;margin-top:0;">Option B — paste it once</p>
+    <ol>
+      <li>Open <a class="plain" href="https://www.duolingo.com" target="_blank" rel="noopener">duolingo.com</a> and log in.</li>
+      <li>Press <b>F12</b>, click <b>Console</b>. If it warns, type <code>allow pasting</code> and Enter.</li>
+      <li><button class="btn copy" id="copy">📋 Copy the code</button> then paste in the console and press Enter. (This copies it <b>without</b> the <code>javascript:</code> prefix, which is what the console needs.)</li>
+    </ol>
+    <span class="code" id="src"></span>
+  </div>
+
+  <p class="note">Your password is only ever used on Duolingo's own site. This page and the bookmark never see it, and nothing is sent to GitHub or anyone else — the numbers are read from your own logged-in Duolingo tab and shown only to you.</p>
+</div>
+
+<script>
+// The bookmarklet source, built once so the button, the URL, and the copy box
+// all stay in sync. It reads the logged-in user's real Total XP, this week's XP
+// (Mon–Sun Pacific) and streak from Duolingo's own endpoints and shows them.
+var CORE = [
+"(async()=>{try{",
+"if(!/(^|\\.)duolingo\\.com$/.test(location.hostname)){alert('Go to duolingo.com and log in first, then click this on that page.');return}",
+"var tz='America/Los_Angeles';",
+"var j=async u=>{var r=await fetch(u,{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);return r.json()};",
+"var u=localStorage.getItem('myDuoUser');u=prompt('Your Duolingo username:',u||'');if(!u)return;u=u.trim().replace(/^@/,'');localStorage.setItem('myDuoUser',u);",
+"var L=await j('/2017-06-30/users?username='+encodeURIComponent(u)+'&fields=users%7Bid,username,name%7D');",
+"var me=L.users&&L.users[0];if(!me){alert('No Duolingo user named \"'+u+'\".');return}",
+"var a=await j('/2023-05-23/users/'+me.id+'?fields=name,totalXp,streak,courses%7Btitle,xp%7D');",
+"if(typeof a.totalXp!=='number'){alert(\"Couldn't read your Total XP - make sure you're logged in to Duolingo in this tab.\");return}",
+"var t=new Date().toLocaleDateString('en-CA',{timeZone:tz}),p=t.split('-').map(Number),mo=new Date(Date.UTC(p[0],p[1]-1,p[2]));mo.setUTCDate(mo.getUTCDate()-((mo.getUTCDay()+6)%7));var mon=mo.toISOString().slice(0,10),bk=new Date(Date.UTC(p[0],p[1]-1,p[2]));bk.setUTCDate(bk.getUTCDate()-13);var st=bk.toISOString().slice(0,10),wk=null;",
+"try{var xs=await j('/2017-06-30/users/'+me.id+'/xp_summaries?startDate='+st+'&endDate='+t+'&timezone='+encodeURIComponent(tz));wk=0;(xs.summaries||[]).forEach(function(s){var d=new Date((s.date>1e12?s.date:s.date*1000)).toLocaleDateString('en-CA',{timeZone:tz});if(d>=mon)wk+=Number(s.gainedXp||0)})}catch(e){}",
+"var co=(a.courses||[]).filter(c=>c.xp>0).sort((x,y)=>y.xp-x.xp).map(c=>c.title+' '+c.xp.toLocaleString()).join(' \\u00B7 ');",
+"var b=document.createElement('div');b.style.cssText='position:fixed;top:20px;right:20px;z-index:2147483647;background:#fff;color:#111;border:3px solid #58cc02;border-radius:16px;padding:18px 20px;font:15px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.25);max-width:320px';",
+"b.innerHTML=\"<div style='font-weight:800;font-size:17px;margin-bottom:8px'>\"+(a.name||u)+\"</div><div>\\u26A1 <b>\"+a.totalXp.toLocaleString()+\"</b> Total XP</div>\"+(wk===null?'':\"<div>\\uD83D\\uDCC5 <b>\"+wk.toLocaleString()+\"</b> XP this week (Mon-Sun)</div>\")+\"<div>\\uD83D\\uDD25 <b>\"+(a.streak||0)+\"</b> day streak</div>\"+(co?\"<div style='color:#777;font-size:12px;margin-top:6px'>\"+co+\"</div>\":'')+\"<div style='margin-top:10px;text-align:right'><button style='border:0;background:#58cc02;color:#fff;font-weight:800;padding:6px 12px;border-radius:10px;cursor:pointer'>OK</button></div>\";",
+"b.querySelector('button').onclick=function(){b.remove()};document.body.appendChild(b)",
+"}catch(e){alert('Error: '+e.message+'. Make sure you are on duolingo.com and logged in.')}})();"
+].join("");
+var HREF = "javascript:" + CORE;
+document.getElementById("bm").setAttribute("href", HREF);
+document.getElementById("src").textContent = HREF;
+document.getElementById("bm").addEventListener("click", function(e){ e.preventDefault(); alert("Don't click me here — drag me to your bookmarks bar, then click me while on duolingo.com."); });
+document.getElementById("copy").addEventListener("click", async function(){
+  try { await navigator.clipboard.writeText(CORE); this.textContent = "✅ Copied — paste in the console"; }
+  catch (e) { this.textContent = "Select the code below and copy it"; }
+});
+</script>
+</body>
+</html>
