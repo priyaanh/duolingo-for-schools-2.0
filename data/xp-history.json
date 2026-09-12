@@ -75,6 +75,18 @@
           "source": "public-profile"
         }
       }
+    },
+    {
+      "date": "2026-09-12",
+      "users": {
+        "priyaanh": {
+          "name": "priyaanh",
+          "totalXp": 51579,
+          "publicXp": 51579,
+          "streak": 299,
+          "source": "public-profile"
+        }
+      }
     }
   ]
 }
